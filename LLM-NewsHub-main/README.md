@@ -225,12 +225,10 @@ python data/output/generate_kg.py
 
 ---
 
-## License
+## Contributing
 
-MIT License. See [license](license) for details.
+Contributions are welcome! Feel free to open issues, submit pull requests, or fork this project for your own use.
 
----
+## Disclaimer
 
-## Full Screen Demo
-
-![Full Screen Demo](source/full_screen.png)
+This project is provided as-is for educational and research purposes. Use it responsibly and respect the terms of service of any data sources you scrape from.
