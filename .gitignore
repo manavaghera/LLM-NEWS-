@@ -1,1 +1,126 @@
-LLM-NewsHub-main.zip
+# Environment & Secrets
+**.env
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# API Keys & Tokens
+*.key
+*.pem
+*.p12
+*.pfx
+*.secret
+
+# OS
+**.DS_Store
+Thumbs.db
+
+# Wav2Lip
+LLM-News/deployment/Wav2Lip/*
+
+# Datasets (external)
+LLM-News/classifier/fake_news/dataset/Fake.csv
+LLM-News/classifier/fake_news/dataset/True.csv
+
+# Scraper data
+LLM-News/data/raw/fundus/*
+LLM-News/data/raw/reddit/*
+LLM-News/temp_comments.csv
+LLM-News/temp_posts.csv
+LLM-News/data/raw/trust_score/*
+
+# Category classifier
+LLM-News/classifier/category/dataset/BBC_News_Train.csv
+LLM-News/classifier/category/dataset/BBC_News_Test.csv
+LLM-News/classifier/category/dataset/BBC_News_Sample_Solution.csv
+LLM-News/classifier/category/experiments/results.json
+LLM-News/classifier/category/models/best_models/knn/*
+LLM-News/classifier/category/models/best_models/svc/*
+LLM-News/classifier/category/models/best_models/best_model.joblib
+LLM-News/classifier/category/models/best_models/best_model.json
+LLM-News/classifier/category/results/analysis/*
+LLM-News/classifier/category/results/knn/predictions/*
+LLM-News/classifier/category/results/svc/predictions/*
+
+# Fake news classifier
+LLM-News/classifier/fake_news/dataset/feature_cache/*
+LLM-News/classifier/fake_news/experiments/results.json
+LLM-News/classifier/fake_news/models/results/*
+LLM-News/classifier/fake_news/models/best_models/*
+
+# Card data
+LLM-News/data/card/event_card/*
+LLM-News/data/card/statement_card/comments/*
+LLM-News/data/card/statement_card/posts/*
+
+# Group & output
+LLM-News/data/group/*
+LLM-News/data/output/article/*
+LLM-News/data/output/image/*
+LLM-News/data/output/resources/*
+LLM-News/data/output/audio/*
+LLM-News/data/output/resource/*
+
+# Eval
+LLM-News/data/eval/*
+LLM-News/data/eval_token_log/*
+
+# UI static
+LLM-News/apps/static/resource/*
+LLM-News/apps/static/images/*
+LLM-News/apps/static/audio/*
+LLM-News/apps/static/video/*
+LLM-News/apps/static/graph/*
+LLM-News/apps/static/articles/*
+LLM-News/apps/static/resources/*
+LLM-News/apps/static/summary-video/*
+
+# Node.js / React
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+LLM-News/apps/frontend/build/
+LLM-News/apps/frontend/dist/
+
+# Python
+**/__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+.installed.cfg
+build/
+dist/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+MANIFEST
+.Python
+develop-eggs/
+downloads/
+pyvenv.cfg
+.venv/
+venv/
+ENV/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Knowledge graph
+LLM-News/data/output/knowledge_graph/knowledge_graph.xlsx
+
+# Misc
+LLM-News/utility_room/*

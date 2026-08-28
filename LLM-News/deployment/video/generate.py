@@ -12,11 +12,8 @@ dotenv.load_dotenv()
 # Your MiniMax API key
 API_KEY = os.getenv('MINIMAX_API_KEY')
 
-# Debug: Print API key (first few characters) to verify it's loaded
-if API_KEY:
-    print(f"API Key loaded (first 8 chars): {API_KEY[:8]}...")
-else:
-    print("Warning: API Key not found in environment variables!")
+if not API_KEY:
+    raise ValueError("MINIMAX_API_KEY not found in environment variables!")
 
 # Endpoint URL for video generation
 url = 'https://api.minimax.io/v1/video_generation'
@@ -30,12 +27,9 @@ The camera remains motionless, capturing a straight-on medium shot that emphasiz
 
 # Request headers including authorization and content type
 headers = {
-    'authorization': f'Bearer {API_KEY}',  # Changed to match demo format
+    'authorization': f'Bearer {API_KEY}',
     'Content-Type': 'application/json'
 }
-
-# Debug: Print the actual header being sent (first few characters)
-print(f"Authorization header (first 8 chars): {headers['authorization'][:8] if headers['authorization'] else 'None'}...")
 
 # Request body with required parameters
 data = {

@@ -8,8 +8,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class LLMClient:
-    "read the notebook!"
-    
     def __init__(self, publisher: str, api_key: Optional[str] = None, base_url: Optional[str] = None):
         self.publisher = publisher.upper()
         self.api_key = api_key or self._get_default_api_key()
@@ -39,7 +37,7 @@ class LLMClient:
     
     def _get_default_base_url(self) -> str:
         urls = {
-            'OPENAI': "https://newapi.maxuhe.com/v1",
+            'OPENAI': "https://api.openai.com/v1",
             'PERPLEXITY': "https://api.perplexity.ai",  
             'ALIBABA': "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
             'GEMINI': "https://generativelanguage.googleapis.com/v1beta/",
@@ -49,7 +47,7 @@ class LLMClient:
     def generate(
         self,
         prompt_content: str,
-        system_content: str = '你是一個傻瓜Agent',
+        system_content: str = 'You are a helpful assistant.',
         temperature: float = 0, # next need to be 0
         top_p: float = 0.5, # 
         model: str = 'gpt-4o-mini',  

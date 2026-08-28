@@ -262,9 +262,3 @@ LLM-NewsHub/
 Contributions are welcome! Feel free to open issues, submit pull requests, or fork this project.
 
 ---
-
-<div align="center">
-
-**Built with AI. Powered by Data.**
-
-</div>

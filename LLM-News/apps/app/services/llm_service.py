@@ -1,3 +1,4 @@
+import os
 import aiohttp
 import logging
 from typing import List, Dict, Optional, Tuple
@@ -63,7 +64,7 @@ class LLMService:
         try:
             if settings.OPENAI_API_KEY:
                 self.openai_client = HTTPLLMClient(
-                    base_url="https://newapi.maxuhe.com/v1",
+                    base_url="https://api.openai.com/v1",
                     api_key=settings.OPENAI_API_KEY
                 )
                 self._available_models["OpenAI"] = [
@@ -178,9 +179,18 @@ class LLMService:
             kg_prompt = user_query
             
             # Call the Knowledge Graph Application
+            app_id = os.getenv('ALIBABA_KG_APP_ID', '')
+            if not app_id:
+                logger.warning("ALIBABA_KG_APP_ID not set. Knowledge Graph will not work.")
+                return {
+                    "response": "Knowledge Graph is not configured. Please set ALIBABA_KG_APP_ID.",
+                    "provider": "Alibaba Knowledge Graph",
+                    "model": "knowledge-graph"
+                }
+            
             response = Application.call(
                 api_key=settings.ALIBABA_LLM_KEY_KG,
-                app_id='b0534f9cd7334c6e8cb8b866fd34ea9f',
+                app_id=app_id,
                 prompt=kg_prompt,
                 parameters={
                     "temperature": 0.8,
