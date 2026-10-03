@@ -1,0 +1,29 @@
+{
+  "category": "tech",
+  "headline": "Chipmaker unveils faster processor",
+  "lead": "A chipmaker unveiled a processor it says is twice as fast.",
+  "body": [
+    {
+      "section": "Launch",
+      "content": "The new processor is twice as fast.<a href='https://example.net/chip'>[1]</a>",
+      "sources": [
+        "https://example.net/chip"
+      ],
+      "sentisement_from_the_content": 0.4,
+      "date": "2026-01-02",
+      "Publisher_region_diversity": [
+        "us"
+      ],
+      "Publishers": [
+        "ArsTechnica"
+      ]
+    }
+  ],
+  "generated_by": "quick_news (OPENROUTER / writer-model)",
+  "claim_check": {
+    "checked": true,
+    "statements": 5,
+    "removed": [],
+    "model": "checker-model"
+  }
+}

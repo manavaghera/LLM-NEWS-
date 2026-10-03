@@ -4,3 +4,6 @@ dist
 .git
 .DS_Store
 *.local
+e2e
+test-results
+playwright-report

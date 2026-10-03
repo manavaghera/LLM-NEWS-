@@ -12,6 +12,8 @@ export const router = createBrowserRouter([
     path: '/',
     element: <Layout />,
     errorElement: <RouteError />,
+    // Shown while an on-demand page loads when it is the first page opened
+    hydrateFallbackElement: <p className="p-8 text-sm text-muted">Loading…</p>,
     children: [
       { index: true, element: <HomePage /> },
       { path: 'article/:date/:groupId', element: <ArticlePage /> },
