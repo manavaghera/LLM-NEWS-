@@ -17,7 +17,7 @@ import base64
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append(project_root)
 
-from llm_client import alibaba_client
+from llm_client import default_client, LLM_MODEL
 from classifier.fake_news.predict import predict_fake_news
 from card.event.prompt import get_event_card_prompt
 warnings.filterwarnings('ignore')
@@ -169,11 +169,11 @@ def generate_event_card(news_content: str, image_captions_with_url: List[Dict], 
     prompt = get_event_card_prompt(news_content, image_captions_with_url, publishing_date)
     
     try:
-        response = alibaba_client.generate(
+        response = default_client.generate(
             prompt_content=prompt,
             system_content="You are a news analyst extracting structured event data.",
             temperature=0,
-            model='qwen-plus',
+            model=LLM_MODEL,
             response_format={"type": "json_object"}
         )
         

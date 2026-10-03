@@ -7,6 +7,7 @@ The project keeps separate dependency files because different parts of the syste
 ```text
 requirements.txt                 # Root install entrypoint; points to requirements/pipeline.txt
 requirements/pipeline.txt        # Main data, ML, scraping, LLM, image, and audio pipeline
+requirements/quick_news.txt      # Lightweight RSS + LLM news generation (pipeline/quick_news.py)
 requirements/wav2lip.txt         # Optional Wav2Lip/video environment
 requirements/full-freeze.txt     # Original full environment freeze for development history
 apps/requirements.txt            # FastAPI backend dependencies used by apps/Dockerfile
