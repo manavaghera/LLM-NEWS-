@@ -48,6 +48,23 @@ def test_daily_budget_caps_calls():
     limits.DailyBudget(limit=0).consume(10_000)  # 0 disables the cap
 
 
+def test_visitor_ip_counts_our_proxies_from_the_end(monkeypatch):
+    from starlette.requests import Request
+
+    def ip(forwarded):
+        headers = [(b"x-forwarded-for", forwarded.encode())] if forwarded else []
+        return limits.client_ip(Request({"type": "http", "headers": headers, "client": ("10.0.0.9", 1)}))
+
+    assert ip("6.6.6.6, 1.2.3.4") == "10.0.0.9"  # headers not trusted by default
+    monkeypatch.setenv("TRUST_PROXY_HEADERS", "true")
+    assert ip("6.6.6.6, 1.2.3.4") == "1.2.3.4"   # nginx only: its entry is last; the first was forged
+    monkeypatch.setenv("PROXY_COUNT", "2")
+    assert ip("6.6.6.6, 1.2.3.4, 172.18.0.5") == "1.2.3.4"  # Caddy, then nginx
+    assert ip("172.18.0.5") == "10.0.0.9"        # shorter than expected: didn't come through our proxies
+    monkeypatch.setenv("PROXY_COUNT", "oops")
+    assert ip("6.6.6.6, 1.2.3.4") == "1.2.3.4"
+
+
 def test_ai_endpoints_return_429_when_rate_limited(monkeypatch):
     monkeypatch.setattr(limits, "ai_rate_limiter", limits.RateLimiter(limit=1))
     from app.api.endpoints import chat

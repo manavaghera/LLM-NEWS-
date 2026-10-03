@@ -1,0 +1,14 @@
+# HTTPS front door for a public server (used by docker-compose.prod.yml). Caddy gets a free certificate
+# for {$DOMAIN} from Let's Encrypt and renews it automatically; plain http:// requests are redirected.
+{$DOMAIN} {
+	# Compress everything except the streamed chat replies, which must reach the browser as they arrive
+	@compressible not path /api/chat/*
+	encode @compressible zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+
+	reverse_proxy frontend:80
+}

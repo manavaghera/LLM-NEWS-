@@ -87,11 +87,17 @@ ai_budget = DailyBudget(_int_env("AI_DAILY_CALL_LIMIT", 500))
 
 
 def client_ip(request: Request) -> str:
-    """The visitor's address. Behind our nginx the last X-Forwarded-For entry is the one nginx added."""
+    """The visitor's address. Each of our proxies appends the address it saw to X-Forwarded-For, so with
+    PROXY_COUNT proxies in front (1: nginx; 2: Caddy then nginx) the visitor is that many entries from the
+    end. Anything earlier was sent by the visitor and can't be trusted."""
     if os.getenv("TRUST_PROXY_HEADERS", "").lower() == "true":
-        forwarded = request.headers.get("x-forwarded-for", "")
-        if forwarded:
-            return forwarded.split(",")[-1].strip()
+        entries = [e.strip() for e in request.headers.get("x-forwarded-for", "").split(",") if e.strip()]
+        try:
+            hops = max(1, int(os.getenv("PROXY_COUNT", "1")))
+        except ValueError:
+            hops = 1
+        if len(entries) >= hops:
+            return entries[-hops]
     return request.client.host if request.client else "unknown"
 
 
