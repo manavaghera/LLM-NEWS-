@@ -1,0 +1,118 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Design tokens: warm "newsprint" light theme and a matching dark theme */
+:root {
+  --paper: #fbfaf7;
+  --surface: #ffffff;
+  --sunken: #f3f1ec;
+  --ink: #1c1b19;
+  --muted: #5f5b54;
+  --faint: #8d887f;
+  --rule: #e6e2da;
+  --accent: #b42318;
+  --accent-ink: #ffffff;
+  --accent-soft: #fbe9e7;
+  /* Category identity for text (>= 4.5:1). Same hues as the chart series below */
+  --social: #c2410c;
+  --tech: #1d4ed8;
+  --entertainment: #047857;
+  --positive: #15803d;
+  --negative: #b91c1c;
+  /* Chart series: validated all-pairs for colour-vision deficiency (dataviz validator) */
+  --series-social: #eb6834;
+  --series-tech: #2a78d6;
+  --series-entertainment: #1baf7a;
+  --series-magnitude: #4a3aa7;
+  --series-positive: #2a78d6;
+  --series-negative: #e34948;
+  color-scheme: light;
+}
+
+.dark {
+  --paper: #121110;
+  --surface: #1a1917;
+  --sunken: #211f1c;
+  --ink: #edeae3;
+  --muted: #b0aba1;
+  --faint: #7f7a71;
+  --rule: #2d2a26;
+  --accent: #f26b57;
+  --accent-ink: #1a0f0d;
+  --accent-soft: #34201c;
+  --social: #fb923c;
+  --tech: #6ea8fe;
+  --entertainment: #34d399;
+  --positive: #4ade80;
+  --negative: #f87171;
+  --series-social: #d95926;
+  --series-tech: #3987e5;
+  --series-entertainment: #199e70;
+  --series-magnitude: #9085e9;
+  --series-positive: #3987e5;
+  --series-negative: #e66767;
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-sunken: var(--sunken);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-rule: var(--rule);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
+  --color-social: var(--social);
+  --color-tech: var(--tech);
+  --color-entertainment: var(--entertainment);
+  --color-positive: var(--positive);
+  --color-negative: var(--negative);
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Newsreader Variable", ui-serif, Georgia, serif;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    @apply bg-paper text-ink font-sans antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  ::selection {
+    background: var(--accent-soft);
+  }
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+}
+
+@utility headline {
+  font-family: var(--font-serif);
+  font-optical-sizing: auto;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+
+@keyframes shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+@utility shimmer {
+  background: linear-gradient(90deg, var(--sunken) 25%, var(--rule) 50%, var(--sunken) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
