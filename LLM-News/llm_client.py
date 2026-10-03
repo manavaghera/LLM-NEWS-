@@ -69,6 +69,9 @@ class _LazyClient:
 # Provider/model for the article and event-card steps; override with LLM_PUBLISHER / LLM_MODEL in .env
 LLM_PUBLISHER = (os.getenv('LLM_PUBLISHER') or 'ALIBABA').upper()
 LLM_MODEL = os.getenv('LLM_MODEL') or (providers.model_for(LLM_PUBLISHER) if LLM_PUBLISHER in providers.PROVIDERS else '')
+# Model for the fact-check and coverage comparison (same provider). A different model from the writer
+# catches more of the writer's mistakes; defaults to LLM_MODEL.
+CHECK_MODEL = os.getenv('CHECK_MODEL') or LLM_MODEL
 
 openai_client = _LazyClient('OPENAI')
 perplexity_client = _LazyClient('PERPLEXITY')

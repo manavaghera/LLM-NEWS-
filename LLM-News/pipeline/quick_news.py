@@ -36,7 +36,7 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from llm_client import default_client, LLM_PUBLISHER, LLM_MODEL
+from llm_client import default_client, CHECK_MODEL, LLM_PUBLISHER, LLM_MODEL
 from news_checks import claim_check, compare_coverage
 from reliability import ReliabilityScorer
 
@@ -337,13 +337,13 @@ def enrich(article: dict, cited: list) -> list:
     """Claim check, then the coverage comparison for multi-outlet stories. Returns notes for the log."""
     notes = []
     try:
-        record = claim_check(article, cited, default_client, LLM_MODEL)
+        record = claim_check(article, cited, default_client, CHECK_MODEL)
         article["claim_check"] = record
         notes.append(f"claims checked, {len(record['removed'])} removed")
     except Exception as e:
         notes.append(f"claim check failed ({str(e)[:60]})")
     try:
-        coverage = compare_coverage(cited, default_client, LLM_MODEL)
+        coverage = compare_coverage(cited, default_client, CHECK_MODEL)
         if coverage:
             article["coverage"] = coverage
             notes.append(f"{len(coverage['perspectives'])} outlets compared")
@@ -411,6 +411,9 @@ def main():
     print(f"Date: {args.date} | LLM: {LLM_PUBLISHER} / {LLM_MODEL}")
     scorer = ReliabilityScorer(ROOT_DIR)
     print(scorer.status())
+    if not args.no_checks:
+        same = " (same as the writer: set CHECK_MODEL to a different model for a stronger check)" if CHECK_MODEL == LLM_MODEL else ""
+        print(f"Fact-check model: {CHECK_MODEL}{same}")
     seen_links = previously_covered_links(args.date, include_date=args.append)
     if seen_links:
         print(f"Skipping {len(seen_links)} links already covered on earlier dates")
