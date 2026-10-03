@@ -53,7 +53,7 @@ def _ask_json(client, model: str, system: str, prompt: str) -> Dict:
 
 
 def _items_block(items: List[Dict]) -> str:
-    return "\n".join(f"[{i}] {it['publisher']}: {it['title']} — {it['summary']}" for i, it in enumerate(items, 1))
+    return "\n".join(f"[{i}] {it['publisher']}: {it['title']} — {it.get('text') or it['summary']}" for i, it in enumerate(items, 1))
 
 
 def claim_check(article: Dict, items: List[Dict], client, model: str) -> Dict:
@@ -101,8 +101,9 @@ def claim_check(article: Dict, items: List[Dict], client, model: str) -> Dict:
     article["body"] = body
     article["timeline"] = {day: event for i, (day, event) in enumerate(timeline.items(), 1) if f"T{i}" not in flagged}
 
+    full = any(it.get("text_basis") == "full article" for it in items)
     return {"checked": True, "statements": len(statements), "removed": removed, "model": model,
-            "basis": "the source headlines and summaries"}
+            "basis": "the source articles" if full else "the source headlines and summaries"}
 
 
 def compare_coverage(items: List[Dict], client, model: str) -> Optional[Dict]:
@@ -114,7 +115,7 @@ def compare_coverage(items: List[Dict], client, model: str) -> Optional[Dict]:
         return None
 
     reports = "\n\n".join(
-        f"OUTLET: {publisher}\n" + "\n".join(f"- {it['title']} — {it['summary']}" for it in group)
+        f"OUTLET: {publisher}\n" + "\n".join(f"- {it['title']} — {it.get('text') or it['summary']}" for it in group)
         for publisher, group in by_publisher.items()
     )
     result = _ask_json(

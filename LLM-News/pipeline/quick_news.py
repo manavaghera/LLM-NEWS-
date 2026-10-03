@@ -36,6 +36,7 @@ if str(ROOT_DIR) not in sys.path:
 
 from llm_client import default_client, CHECK_MODEL, LLM_PUBLISHER, LLM_MODEL
 from news_checks import claim_check, compare_coverage
+from full_text import FullTextFetcher
 from media import best_image, download_image, make_audio, make_thumbnail
 from reliability import ReliabilityScorer
 
@@ -82,6 +83,7 @@ Pick the {per_category} most newsworthy stories (prefer stories reported by seve
 
 Rules:
 - Use ONLY facts stated in the story's items. Do not invent quotes, numbers, names or dates.
+- Write in your own words. Quote at most one short phrase per section; never copy sentences from the items.
 - Every body section must list the item numbers it is based on in "item_ids" (items of that story only).
 - When a story has several items, use and cite all of them so readers see every publisher's reporting.
 - "sentiment" is the tone of that section, from -1.0 (very negative) to 1.0 (very positive).
@@ -107,7 +109,7 @@ def clean_text(raw: str, limit: int = 500) -> str:
     return text[:limit].rsplit(" ", 1)[0] + "..." if len(text) > limit else text
 
 
-def fetch_items(category: str, per_feed: int, seen_links: set) -> list:
+def fetch_items(category: str, per_feed: int, seen_links: set, fetcher=None) -> list:
     """Newest items from each feed of a category, skipping links in seen_links (and adding new ones)."""
     items = []
     for publisher, region, url in FEEDS[category]:
@@ -136,8 +138,12 @@ def fetch_items(category: str, per_feed: int, seen_links: set) -> list:
                 "image": best_image(entry),
                 "published": datetime(*published[:6]).strftime("%Y-%m-%d") if published else "",
             })
+            # The article itself where the publisher allows it (see full_text.py); else the RSS summary
+            full = fetcher.fetch(publisher, link) if fetcher else ""
+            items[-1].update(text=full or items[-1]["summary"], text_basis="full article" if full else "summary")
             added += 1
-        print(f"  {publisher}: {added} items")
+        full_count = sum(1 for item in items if item["publisher"] == publisher and item["text_basis"] == "full article")
+        print(f"  {publisher}: {added} items" + (f" ({full_count} with full text)" if full_count else ""))
     return items
 
 
@@ -188,7 +194,8 @@ def write_articles(category: str, items: list, stories: dict, per_category: int)
             item = items[n - 1]
             lines.append(
                 f"[{n}] {item['publisher']} ({item['region']}), published {item['published'] or 'unknown'}\n"
-                f"Title: {item['title']}\nSummary: {item['summary']}"
+                f"Title: {item['title']}\n{'Article' if item.get('text_basis') == 'full article' else 'Summary'}: "
+                f"{item.get('text') or item['summary']}"
             )
         blocks.append("\n".join(lines))
     prompt = PROMPT_TEMPLATE.format(
@@ -283,7 +290,8 @@ def build_article(draft: dict, items: list, allowed: set, category: str, date: s
     }
 
 
-SOURCE_FIELDS = ("publisher", "region", "title", "summary", "link", "published")
+# Kept with each article for transparency (the full text itself is never stored)
+SOURCE_FIELDS = ("publisher", "region", "title", "summary", "link", "published", "text_basis")
 
 
 def enrich(article: dict, cited: list) -> list:
@@ -317,6 +325,7 @@ def main():
                         help="how similar items must be to count as one story, 0-1 (default 0.2)")
     parser.add_argument("--no-images", action="store_true", help="don't download article images")
     parser.add_argument("--no-audio", action="store_true", help="don't generate audio summaries")
+    parser.add_argument("--no-full-text", action="store_true", help="only use RSS summaries, never fetch articles")
     parser.add_argument("--no-checks", action="store_true",
                         help="skip the claim check and coverage comparison (2 fewer AI calls per article)")
     parser.add_argument("--overwrite", action="store_true", help="replace articles already made for this date")
@@ -355,13 +364,16 @@ def main():
     if not args.no_checks:
         same = " (same as the writer: set CHECK_MODEL to a different model for a stronger check)" if CHECK_MODEL == LLM_MODEL else ""
         print(f"Fact-check model: {CHECK_MODEL}{same}")
+    fetcher = None if args.no_full_text else FullTextFetcher(USER_AGENT)
+    if fetcher:
+        print(fetcher.status())
     seen_links = previously_covered_links(args.date, include_date=args.append)
     if seen_links:
         print(f"Skipping {len(seen_links)} links already covered on earlier dates")
 
     for category in chosen:
         print(f"\n[{category}] fetching feeds...")
-        items = fetch_items(category, args.per_feed, seen_links)
+        items = fetch_items(category, args.per_feed, seen_links, fetcher)
         if not items:
             print(f"[{category}] no new items, skipping")
             continue

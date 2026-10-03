@@ -2,6 +2,25 @@
 
 All scripts should be run from the project root unless a section says otherwise.
 
+## Quick news (recommended)
+
+RSS feeds + one AI key; no Reddit keys, datasets or classifiers needed.
+
+```bash
+pip install -r requirements/quick_news.txt
+python pipeline/quick_news.py                       # today's news into apps/static/
+python pipeline/quick_news.py --append --categories social   # add one category to today
+python pipeline/thumbnails.py                       # card thumbnails for older images
+python pipeline/daily_update.py --every 07:00       # refresh every morning (+ digest and briefing)
+python pipeline/email_digest.py --dry-run           # preview the digest email
+```
+
+Useful `.env` settings: `LLM_PUBLISHER`, `LLM_MODEL`, `CHECK_MODEL` (a different model for the
+fact-check), `SMTP_*` and `DIGEST_EMAIL_TO` for the email. `--no-checks`, `--no-full-text`,
+`--no-images` and `--no-audio` make runs cheaper or faster.
+
+The original full pipeline follows.
+
 ## Environment Setup
 
 ```bash
