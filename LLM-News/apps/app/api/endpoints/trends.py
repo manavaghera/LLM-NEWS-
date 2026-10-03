@@ -1,10 +1,12 @@
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional
+from ...services.report_service import ReportService
 from ...services.trend_service import TrendService
 
 router = APIRouter()
 
 trend_service = TrendService()
+report_service = ReportService()
 
 
 @router.get("/topics")
@@ -50,3 +52,16 @@ async def get_publisher_diversity(
         return trend_service.get_publisher_diversity(date=date)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch publisher diversity: {str(e)}")
+
+
+@router.get("/accuracy")
+async def get_accuracy(days: int = Query(30, ge=1, le=365, description="Number of days to analyze")):
+    """Fact-check results per day and per model: share of statements removed as unsupported."""
+    try:
+        result = trend_service.get_accuracy(days=days)
+        reports = report_service.counts_by_date(day["date"] for day in result["days"])
+        for day in result["days"]:
+            day["reader_reports"] = reports.get(day["date"], 0)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch accuracy: {str(e)}")

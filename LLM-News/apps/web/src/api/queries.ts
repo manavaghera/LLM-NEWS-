@@ -1,5 +1,6 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { api } from './client'
+import type { ReportRequest } from './types'
 
 const HOUR = 60 * 60 * 1000
 
@@ -48,3 +49,14 @@ export const useTranslate = () =>
     mutationFn: ({ date, groupId, language }: { date: string; groupId: string; language: string }) =>
       api.translate(date, groupId, language),
   })
+
+export const useRelated = (date: string | undefined, groupId: string | undefined) =>
+  useQuery({
+    queryKey: ['related', date, groupId],
+    queryFn: () => api.related(date!, groupId!),
+    enabled: !!date && !!groupId,
+  })
+
+export const useAccuracy = (days: number) => useQuery({ queryKey: ['trends', 'accuracy', days], queryFn: () => api.accuracy(days) })
+
+export const useReport = () => useMutation({ mutationFn: (report: ReportRequest) => api.report(report) })

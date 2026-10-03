@@ -1,4 +1,5 @@
 import type {
+  AccuracyResponse,
   Article,
   CategoryTrendsResponse,
   DatesResponse,
@@ -7,6 +8,8 @@ import type {
   ModelsResponse,
   NewsItem,
   PublisherDiversityResponse,
+  RelatedItem,
+  ReportRequest,
   SentimentTrendsResponse,
   TopicsResponse,
   TranslateResponse,
@@ -61,6 +64,10 @@ export const api = {
       body: JSON.stringify({ date, group_id: groupId, target_languages: [language] }),
     }),
   models: () => request<ModelsResponse>('/api/chat/models'),
+  related: (date: string, groupId: string) => request<RelatedItem[]>(`/api/news/articles/${q(date)}/${q(groupId)}/related`),
+  accuracy: (days: number) => request<AccuracyResponse>(`/api/trends/accuracy?days=${days}`),
+  report: (report: ReportRequest) =>
+    request<{ status: string }>('/api/reports', { method: 'POST', body: JSON.stringify(report) }),
 }
 
 /** Public URLs the backend serves for each article's generated media. */

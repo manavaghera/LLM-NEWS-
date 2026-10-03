@@ -188,3 +188,41 @@ class TrendService:
             "unique_publishers": len(publisher_counter),
             "unique_regions": len(region_counter),
         }
+
+    def get_accuracy(self, days: int = 30) -> Dict:
+        """Fact-check results per day and per writer/checker model pair: how many of the article
+        statements the second AI pass could not match to the sources (and removed)."""
+        all_articles = self._load_all_articles()
+        dates = sorted(all_articles.keys(), reverse=True)[:days]
+        by_day, by_models = [], {}
+        for date_str in sorted(dates):
+            day = {"date": date_str, "articles": len(all_articles[date_str]), "checked": 0, "statements": 0, "removed": 0}
+            for article in all_articles[date_str]:
+                check = article.get("claim_check") or {}
+                if not check.get("checked"):
+                    continue
+                statements, removed = int(check.get("statements") or 0), len(check.get("removed") or [])
+                day["checked"] += 1
+                day["statements"] += statements
+                day["removed"] += removed
+                writer = writer_model(article.get("generated_by", ""))
+                pair = by_models.setdefault((writer, check.get("model") or writer),
+                                            {"articles": 0, "statements": 0, "removed": 0})
+                pair["articles"] += 1
+                pair["statements"] += statements
+                pair["removed"] += removed
+            day["removed_pct"] = round(100 * day["removed"] / day["statements"], 1) if day["statements"] else None
+            by_day.append(day)
+        models = [
+            {"writer": writer, "checker": checker, **counts,
+             "removed_pct": round(100 * counts["removed"] / counts["statements"], 1) if counts["statements"] else None}
+            for (writer, checker), counts in by_models.items()
+        ]
+        return {"days": by_day, "models": sorted(models, key=lambda m: -m["articles"])}
+
+
+def writer_model(generated_by: str) -> str:
+    """"quick_news (OPENROUTER / qwen/qwen-plus)" -> "qwen/qwen-plus"; "unknown" for older articles"""
+    match = re.search(r"\(([^)]*)\)", generated_by or "")
+    parts = match.group(1).split(" / ", 1) if match else []
+    return parts[1] if len(parts) == 2 else "unknown"

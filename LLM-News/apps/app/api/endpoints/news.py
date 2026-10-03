@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional
+from ...services import archive
 from ...services.news_service import NewsService
 from ...core.config import settings
 from pathlib import Path
@@ -32,7 +33,12 @@ async def search_archive(
     limit: int = Query(40, ge=1, le=100),
 ):
     """Stories from every edition containing all the words, newest edition first"""
-    return news_service.search_archive(q, limit)
+    return archive.search_archive(news_service, q, limit)
+
+@router.get("/articles/{date}/{group_id}/related")
+async def related_articles(date: str, group_id: str):
+    """Earlier coverage of the same story in previous editions"""
+    return archive.related_articles(news_service, date, group_id)
 
 @router.get("/articles/{date}/{group_id}")
 async def get_article(date: str, group_id: str):

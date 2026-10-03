@@ -4,6 +4,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "pipeline"))
 
+import media  # noqa: E402
 import quick_news as q  # noqa: E402
 
 
@@ -64,16 +65,16 @@ def test_resolve_story_falls_back_to_first_cited_item():
 def test_best_image_skips_tracking_pixels_and_upsizes_bbc():
     npr = {"summary": "<img src='https://media.npr.org/include/images/tracking/npr-rss-pixel.png' />"
                       "<img src='undefined'/><img src='https://npr.brightspotcdn.com/photo.jpg'/>"}
-    assert q.best_image(npr) == "https://npr.brightspotcdn.com/photo.jpg"
+    assert media.best_image(npr) == "https://npr.brightspotcdn.com/photo.jpg"
     bbc = {"media_thumbnail": [{"url": "https://ichef.bbci.co.uk/ace/standard/240/x.jpg", "width": "240"}]}
-    assert q.best_image(bbc) == "https://ichef.bbci.co.uk/ace/standard/976/x.jpg"
+    assert media.best_image(bbc) == "https://ichef.bbci.co.uk/ace/standard/976/x.jpg"
     guardian = {"media_content": [{"url": "https://i.guim.co.uk/small", "width": "140"},
                                   {"url": "https://i.guim.co.uk/large", "width": "700"}]}
-    assert q.best_image(guardian) == "https://i.guim.co.uk/large"
+    assert media.best_image(guardian) == "https://i.guim.co.uk/large"
 
 
 def test_download_image_rejects_non_web_urls(tmp_path):
-    assert q.download_image("file:///etc/passwd", tmp_path, "group_1") == ""
+    assert media.download_image("file:///etc/passwd", tmp_path, "group_1") == ""
     assert list(tmp_path.iterdir()) == []
 
 
@@ -83,11 +84,22 @@ def test_download_image_keeps_the_real_format(tmp_path, monkeypatch):
         def read(self, n): return b"x" * 4096
         def __enter__(self): return self
         def __exit__(self, *a): return False
-    monkeypatch.setattr(q.urllib.request, "urlopen", lambda req, timeout: Response())
-    assert q.download_image("https://img.example/a", tmp_path, "group_2") == "group_2.webp"
+    monkeypatch.setattr(media.urllib.request, "urlopen", lambda req, timeout: Response())
+    assert media.download_image("https://img.example/a", tmp_path, "group_2") == "group_2.webp"
     assert (tmp_path / "group_2.webp").stat().st_size == 4096
 
 
 def test_clean_text_strips_html_and_truncates():
     assert q.clean_text("<p>Hello &amp; <b>welcome</b></p>") == "Hello & welcome"
     assert q.clean_text("word " * 200, limit=20).endswith("...")
+
+
+def test_make_thumbnail_is_a_small_webp(tmp_path):
+    from PIL import Image
+    big = tmp_path / "group_1.png"
+    Image.new("RGB", (2000, 1200), (200, 30, 30)).save(big)
+    assert media.make_thumbnail(big) == "group_1.thumb.webp"
+    with Image.open(tmp_path / "group_1.thumb.webp") as thumb:
+        assert thumb.format == "WEBP" and thumb.size == (800, 480)
+    (tmp_path / "broken.jpg").write_bytes(b"not an image")
+    assert media.make_thumbnail(tmp_path / "broken.jpg") == ""

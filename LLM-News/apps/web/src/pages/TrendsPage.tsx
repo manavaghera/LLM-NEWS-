@@ -1,6 +1,7 @@
 import { TrendingUp } from 'lucide-react'
 import { useState } from 'react'
 import { useCategoryTrends, useDates, usePublishers, useSentimentTrends, useTopics } from '@/api/queries'
+import { AccuracyCard } from '@/components/trends/AccuracyCard'
 import { ChartCard, StatTile, useChartColors, seriesColor } from '@/components/trends/chartKit'
 import { HorizontalBars, StackedColumns, ToneLines } from '@/components/trends/charts'
 import { EmptyState, ErrorState, Skeleton } from '@/components/ui/feedback'
@@ -110,10 +111,12 @@ export function TrendsPage() {
         </p>
       )}
 
+      <AccuracyCard days={days} />
+
       <div className="grid gap-6 lg:grid-cols-2">
         <ChartCard
           title="Most mentioned topics"
-          subtitle="Keywords across headlines and article text"
+          subtitle="Names and places, by number of stories mentioning them"
           table={{
             columns: multiDay ? ['Keyword', 'Mentions', 'Growth'] : ['Keyword', 'Mentions'],
             rows: topicRows.map((r) => (multiDay ? [r.name, r.value, `${r.growth}%`] : [r.name, r.value])),

@@ -11,7 +11,7 @@ export function StoryCard({ item, showCategory = true }: { item: NewsItem; showC
     <article className="group relative flex flex-col gap-3">
       <div className="relative">
         <ArticleImage
-          src={item.image_url}
+          src={item.thumb_url ?? item.image_url}
           alt=""
           category={item.category}
           show={item.has_image !== false}

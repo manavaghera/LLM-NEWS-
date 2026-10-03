@@ -8,6 +8,8 @@ import { ArticleSections, BottomLine, SourcesList, Timeline } from '@/components
 import { AtAGlance } from '@/components/article/AtAGlance'
 import { AudioPlayer } from '@/components/article/AudioPlayer'
 import { CoverageComparison } from '@/components/article/CoverageComparison'
+import { EarlierCoverage } from '@/components/article/EarlierCoverage'
+import { ReportProblem } from '@/components/article/ReportProblem'
 import { ShareButton } from '@/components/article/ShareButton'
 import { TranslateControl } from '@/components/article/TranslateControl'
 import { TrustNote } from '@/components/article/TrustNote'
@@ -103,7 +105,11 @@ export function ArticlePage() {
           <CoverageComparison coverage={shown.coverage} />
           <BottomLine text={shown.conclusion} />
           <Timeline timeline={shown.timeline} />
+          <EarlierCoverage date={date} groupId={groupId} />
           <SourcesList article={shown} />
+          <div className="border-t border-rule pt-4">
+            <ReportProblem date={date} groupId={groupId} />
+          </div>
         </div>
         <AtAGlance article={shown} />
       </div>

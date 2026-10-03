@@ -101,3 +101,21 @@ def article_topics(articles: Iterable[Dict]) -> Dict[str, int]:
         for topic in extract_topics(article_text(article)) - outlets:
             counts[topic] = counts.get(topic, 0) + 1
     return counts
+
+
+def topics_of(article: Dict) -> Set[str]:
+    """Named topics of one article, without the outlets that reported it"""
+    outlets = publisher_names(
+        p for s in article.get("body", []) if isinstance(s, dict) for p in s.get("Publishers", []) or []
+    )
+    return extract_topics(article_text(article)) - outlets
+
+
+def shared_story_score(a: Set[str], b: Set[str]) -> int:
+    """How strongly two articles look like the same running story: shared multi-word names count double.
+    0 unless they share at least two topics including one multi-word name (one shared "Trump" isn't enough)."""
+    shared = a & b
+    multi = [t for t in shared if " " in t]
+    if len(shared) < 2 or not multi:
+        return 0
+    return len(shared) + len(multi)

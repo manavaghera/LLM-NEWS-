@@ -13,6 +13,7 @@ export interface NewsItem {
   image_url: string
   has_image?: boolean
   image_credit?: string | null
+  thumb_url?: string | null
   publishers?: string[]
   source_count?: number
   claim_check?: ClaimCheck | null
@@ -183,4 +184,30 @@ export type ChatEvent =
 export interface ChatTurn {
   role: 'user' | 'assistant'
   content: string
+}
+
+export interface AccuracyDay {
+  date: string
+  articles: number
+  checked: number
+  statements: number
+  removed: number
+  removed_pct: number | null
+  reader_reports?: number
+}
+
+export interface AccuracyResponse {
+  days: AccuracyDay[]
+  models: { writer: string; checker: string; articles: number; statements: number; removed: number; removed_pct: number | null }[]
+}
+
+export type RelatedItem = NewsItem & { shared_topics: string[] }
+
+export type ReportKind = 'wrong_fact' | 'missing_context' | 'bad_source' | 'other'
+
+export interface ReportRequest {
+  date: string
+  group_id: string
+  kind: ReportKind
+  message: string
 }

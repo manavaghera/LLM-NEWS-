@@ -31,6 +31,14 @@ def image_url(date: str, group_id: str, article: Dict) -> str:
     return f"/static/images/{date}/{name if IMAGE_FILE.fullmatch(name) else f'{group_id}.jpg'}"
 
 
+def thumb_url(date: str, article: Dict) -> Optional[str]:
+    """Small WebP version of the image for cards (made by the pipeline), when it exists"""
+    name = str(article.get("image_thumb") or "")
+    if not re.fullmatch(r"group_\d+\.thumb\.webp", name) or not Path(f"static/images/{date}/{name}").is_file():
+        return None
+    return f"/static/images/{date}/{name}"
+
+
 class NewsService:
     def __init__(self):
         self.articles_cache: Dict[str, Dict] = {}
@@ -126,36 +134,13 @@ class NewsService:
             "image_url": url,
             "has_image": Path(url.lstrip("/")).is_file(),
             "image_credit": article.get("image_credit"),
+            "thumb_url": thumb_url(date, article),
             "publishers": publishers,
             "source_count": len(sources),
             "claim_check": article.get("claim_check"),
             "outlets_compared": len((article.get("coverage") or {}).get("perspectives", [])),
         }
 
-    def search_archive(self, query: str, limit: int = 40) -> List[Dict]:
-        """Stories from every edition whose text contains all the query's words, newest first;
-        headline matches rank first within an edition"""
-        words = [w for w in re.findall(r"\w+", query.lower()) if len(w) > 1]
-        if not words:
-            return []
-        results = []
-        for date in self.available_dates():
-            matches = []
-            for group_id, article in self.load_articles_for_date(date).items():
-                body = " ".join(
-                    f"{s.get('section', '')} {s.get('content', '')} {' '.join(map(str, s.get('Publishers', []) or []))}"
-                    for s in article.get("body", []) if isinstance(s, dict)
-                )
-                headline = article.get("headline", "").lower()
-                text = re.sub(r"<[^>]*>", " ", f"{headline} {article.get('subheadline', '')} {article.get('lead', '')} {body}").lower()
-                if all(w in text for w in words):
-                    matches.append((-sum(w in headline for w in words), group_number(group_id), group_id, article))
-            for *_, group_id, article in sorted(matches, key=lambda m: m[:2]):
-                results.append(self.news_item(date, group_id, article))
-                if len(results) >= limit:
-                    return results
-        return results
-    
     def get_categories(self, date: str) -> Dict:
         """Get categories for a specific date"""
         self.load_articles_for_date(date)  # This loads categories too
