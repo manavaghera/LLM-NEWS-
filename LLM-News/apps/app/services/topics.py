@@ -4,13 +4,15 @@ Pure functions, no NLP dependencies. Capitalised words at the start of a sentenc
 ("Five men...", "Police said..."), so a lone one only counts when it also appears mid-sentence.
 """
 import re
-from typing import Dict, Iterable, Set
+from collections import Counter
+from typing import AbstractSet, Dict, Iterable, Set
 
 # A name token: Capitalised word (incl. inner capitals like MacArthur/OpenAI and hyphen/apostrophe parts),
-# ACRONYM, or dotted acronym (U.S.)
+# ACRONYM (incl. ones with numbers: G7, COP30), or dotted acronym (U.S.)
 UPPER, LOWER = "A-ZÀ-ÖØ-Þ", "a-zß-öø-ÿ"  # Latin letters incl. accents (González, Zürich)
+ACRONYM = r"[A-Z]{1,4}\d{1,3}|[A-Z]{2,5}s?"
 NAME = (rf"(?:[{UPPER}][{LOWER}]+(?:[{UPPER}][{LOWER}]*)*(?:['’][{UPPER}][{LOWER}]+)?(?:-[{UPPER}][{LOWER}]+)*"
-        rf"|[A-Z]{{2,5}}s?|(?:[A-Z]\.){{2,}})")
+        rf"|{ACRONYM}|(?:[A-Z]\.){{2,}})")
 PHRASE = re.compile(rf"(?<![\w.]){NAME}(?:\s+(?:of\s+(?:the\s+)?)?{NAME}){{0,4}}(?![\w-])")  # up to 5-word names
 SENTENCE_START = re.compile(r"(?:^\s*|[.!?:;]\s+|[\"“‘(]\s*)$")
 
@@ -59,7 +61,7 @@ def extract_topics(text: str) -> Set[str]:
             mid_sentence.add(topic)
         elif re.match(r"\S+\s+of\s", topic):
             of_at_start.add(topic)
-        elif " " in topic or re.fullmatch(r"[A-Z]{2,5}s?", topic):
+        elif " " in topic or re.fullmatch(ACRONYM, topic):
             found.add(topic)  # multi-word names and acronyms are unambiguous even at a sentence start
         # a lone capitalised word at a sentence start is only a name if it also appears mid-sentence
     for topic in of_at_start:
@@ -81,7 +83,7 @@ def publisher_names(publisher_ids: Iterable[str]) -> Set[str]:
     for pid in publisher_ids:
         spaced = re.sub(r"([a-z])([A-Z])", r"\1 \2", re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1 \2", str(pid)))
         words = spaced.split()
-        names.add(spaced)
+        names |= {spaced, str(pid)}  # the AI sometimes writes the id itself ("the BBCNews article")
         if len(words) > 1 and words[0] == "The":
             names.add(" ".join(words[1:]))
         if len(words) > 1 and re.fullmatch(r"[A-Z]{2,5}", words[0]):
@@ -111,11 +113,22 @@ def topics_of(article: Dict) -> Set[str]:
     return extract_topics(article_text(article)) - outlets
 
 
-def shared_story_score(a: Set[str], b: Set[str]) -> int:
-    """How strongly two articles look like the same running story: shared multi-word names count double.
-    0 unless they share at least two topics including one multi-word name (one shared "Trump" isn't enough)."""
+def broad_topics(editions: Iterable[Iterable[Set[str]]], min_stories: int = 2) -> Set[str]:
+    """Topics that several stories of one edition mention ("US", "AI"). A running story gets one article
+    per edition, so these are too general to tie two stories together on their own."""
+    broad: Set[str] = set()
+    for stories in editions:
+        counts = Counter(t for topics in stories for t in topics)
+        broad |= {t for t, n in counts.items() if n >= min_stories}
+    return broad
+
+
+def shared_story_score(a: Set[str], b: Set[str], strong: AbstractSet[str] = frozenset()) -> int:
+    """How strongly two articles look like the same running story: shared specific topics count double.
+    0 unless they share at least two topics, one of them specific: a multi-word name, or one of the
+    `strong` single names (one shared "Trump" isn't enough)."""
     shared = a & b
-    multi = [t for t in shared if " " in t]
-    if len(shared) < 2 or not multi:
+    specific = [t for t in shared if " " in t or t in strong]
+    if len(shared) < 2 or not specific:
         return 0
-    return len(shared) + len(multi)
+    return len(shared) + len(specific)

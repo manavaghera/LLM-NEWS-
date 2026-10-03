@@ -75,3 +75,16 @@ def test_earlier_coverage_links_the_same_running_story(static_root):
     assert [(r["date"], r["group_id"]) for r in related] == [("2026-01-01", "group_1")]
     assert related[0]["shared_topics"][0] == "UN Security Council"
     assert client.get("/api/news/articles/2026-01-01/group_1/related").json() == []  # only looks back
+
+
+def test_earlier_coverage_by_a_shared_headline_subject(static_root):
+    today = write_article(static_root, "2026-01-03", "group_1", "G7 Prepares to Release Oil Reserves")
+    set_article(today, lead="Under pressure from Washington, the G7 agreed to release oil, avoiding a US export ban.")
+    same = write_article(static_root, "2026-01-02", "group_1", "G7 Agrees to Release 100 Million Barrels")
+    set_article(same, lead="The G7 will release oil after fighting between the US and Iran.")
+    other = write_article(static_root, "2026-01-02", "group_2", "Five Men Released on Bail")
+    set_article(other, lead="Police said the men worked for Iran and had links to the US.")  # names, not subject
+
+    related = client.get("/api/news/articles/2026-01-03/group_1/related").json()
+    assert [(r["date"], r["group_id"]) for r in related] == [("2026-01-02", "group_1")]
+    assert related[0]["shared_topics"] == ["G7", "US"]
