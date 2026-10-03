@@ -164,3 +164,38 @@ def test_chat_stream_validates_input():
     assert client.post("/api/chat/stream", json={"message": "Hi", "history": too_long_history}).status_code == 422
     assert client.post("/api/chat/stream", json={"message": ""}).status_code == 422
     assert client.post("/api/chat/stream", json={"message": "Hi", "history": [{"role": "system", "content": "x"}]}).status_code == 422
+
+
+def test_stalled_ai_stream_gives_up_with_a_clear_message():
+    import asyncio
+
+    import aiohttp
+    import pytest
+    from aiohttp import web
+
+    from app.services.llm_service import AIServiceSlow, HTTPLLMClient
+
+    async def stall(request):  # starts the reply, then sends nothing
+        response = web.StreamResponse(headers={"Content-Type": "text/event-stream"})
+        await response.prepare(request)
+        await asyncio.sleep(5)
+        return response
+
+    async def run():
+        server = web.Application()
+        server.router.add_post("/chat/completions", stall)
+        runner = web.AppRunner(server)
+        await runner.setup()
+        site = web.TCPSite(runner, "127.0.0.1", 0)
+        await site.start()
+        port = site._server.sockets[0].getsockname()[1]
+        client = HTTPLLMClient(f"http://127.0.0.1:{port}", "key")
+        client.timeout = aiohttp.ClientTimeout(total=5, sock_read=0.3)
+        try:
+            with pytest.raises(AIServiceSlow, match="taking too long"):
+                async for _ in client.stream([{"role": "user", "content": "hi"}], "model"):
+                    pass
+        finally:
+            await runner.cleanup()
+
+    asyncio.run(run())

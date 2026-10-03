@@ -16,6 +16,8 @@ def test_providers_use_current_endpoints_and_models():
     assert providers.PROVIDERS["GEMINI"].base_url.endswith("/v1beta/openai")
     assert providers.PROVIDERS["GEMINI"].model == "gemini-2.5-flash"
     assert providers.PROVIDERS["PERPLEXITY"].model == "sonar"
+    assert providers.PROVIDERS["NVIDIA"].base_url == "https://integrate.api.nvidia.com/v1"
+    assert providers.PROVIDERS["NVIDIA"].key_env == "NVIDIA_API_KEY"
 
 
 def test_providers_prefer_llm_publisher_and_allow_model_override(monkeypatch):

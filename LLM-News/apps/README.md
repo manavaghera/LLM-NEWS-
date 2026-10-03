@@ -20,7 +20,7 @@ python -m venv .venv
 cd web && npm ci && npm run dev                   # http://localhost:5173 (proxies to port 8000)
 ```
 
-Settings come from `../.env` (template: `../.env.example`): an AI key (`OPENROUTER_API_KEY`,
+Settings come from `../.env` (template: `../.env.example`): an AI key (`OPENROUTER_API_KEY`, `NVIDIA_API_KEY`,
 `OPENAI_API_KEY`, ...), optional model overrides, `AI_RATE_LIMIT`, `AI_DAILY_CALL_LIMIT`,
 `PUBLIC_BASE_URL` (for share previews and RSS when public), `ALLOWED_ORIGINS` and `ADMIN_TOKEN`.
 

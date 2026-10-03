@@ -162,6 +162,7 @@ There are two ways to produce the news:
 git clone https://github.com/manavaghera/LLM-NEWS-.git
 cd LLM-NEWS-/LLM-News
 cp .env.example .env        # add an AI key, e.g. OPENROUTER_API_KEY, and LLM_PUBLISHER=OPENROUTER
+                            # (free for testing: NVIDIA_API_KEY from build.nvidia.com, LLM_PUBLISHER=NVIDIA)
 
 # 2. Write today's news (Python 3.11)
 python -m venv .venv

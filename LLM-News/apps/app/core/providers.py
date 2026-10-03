@@ -24,6 +24,9 @@ PROVIDERS = {
     "ALIBABA": Provider("Alibaba", "ALIBABA_LLM_KEY", "https://dashscope-intl.aliyuncs.com/compatible-mode/v1", "qwen-plus"),
     "GEMINI": Provider("Gemini", "GEMINI_API_KEY", "https://generativelanguage.googleapis.com/v1beta/openai", "gemini-2.5-flash"),
     "PERPLEXITY": Provider("Perplexity", "PERPLEXITY_API_KEY", "https://api.perplexity.ai", "sonar"),
+    # Free key at build.nvidia.com, for development and testing only (production needs NVIDIA AI Enterprise).
+    # Free queues vary a lot: on 2026-10-03 DeepSeek, GLM, Kimi and Gemma timed out; Nemotron 3 Ultra was fast.
+    "NVIDIA": Provider("NVIDIA", "NVIDIA_API_KEY", "https://integrate.api.nvidia.com/v1", "nvidia/nemotron-3-ultra-550b-a55b"),
 }
 
 
