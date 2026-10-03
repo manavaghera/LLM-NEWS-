@@ -7,28 +7,34 @@ services:
       - "8000"
     environment:
       - DEBUG=false
+      # Only nginx can reach the backend, so its X-Forwarded-For header identifies visitors for rate limits
+      - TRUST_PROXY_HEADERS=true
     volumes:
       - ./static:/app/static:ro
+      - cache:/app/cache  # generated translations, digests and audio
     env_file:
       - ../.env
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      # python:3.11-slim has no curl
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
       interval: 30s
       timeout: 10s
       retries: 3
 
   frontend:
-    build: frontend
+    build: web
     ports:
       - "3000:80"
     depends_on:
       - backend
     restart: unless-stopped
-    environment:
-      - REACT_APP_API_URL=/api
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:80"]
+      # 127.0.0.1, not localhost: in Alpine localhost resolves to IPv6 first and nginx listens on IPv4
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:80"]
       interval: 30s
       timeout: 10s
       retries: 3
+
+volumes:
+  cache:

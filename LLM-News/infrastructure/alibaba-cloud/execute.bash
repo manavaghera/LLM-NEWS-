@@ -26,7 +26,7 @@ FRONTEND_TAG="${ALIYUN_REGISTRY}/${ALIYUN_NAMESPACE}/${FRONTEND_IMAGE}:latest"
 docker login --username="$ALIYUN_USER" --password="$ALIYUN_PASSWORD" "$ALIYUN_REGISTRY"
 
 docker build -t "$BACKEND_IMAGE" "$ROOT_DIR/apps"
-docker build -t "$FRONTEND_IMAGE" "$ROOT_DIR/apps/frontend"
+docker build -t "$FRONTEND_IMAGE" "$ROOT_DIR/apps/web"
 
 docker tag "$BACKEND_IMAGE" "$BACKEND_TAG"
 docker tag "$FRONTEND_IMAGE" "$FRONTEND_TAG"

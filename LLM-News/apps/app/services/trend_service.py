@@ -6,6 +6,8 @@ from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 import re
 
+from .topics import article_topics
+
 logger = logging.getLogger(__name__)
 
 
@@ -41,28 +43,6 @@ class TrendService:
 
         return all_articles
 
-    def _extract_keywords(self, text: str, top_n: int = 10) -> List[str]:
-        """Extract top keywords from text using simple frequency analysis."""
-        if not text:
-            return []
-        stop_words = {
-            "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
-            "have", "has", "had", "do", "does", "did", "will", "would", "could",
-            "should", "may", "might", "shall", "can", "to", "of", "in", "for",
-            "on", "with", "at", "by", "from", "as", "into", "through", "during",
-            "before", "after", "above", "below", "between", "under", "again",
-            "and", "but", "or", "nor", "not", "so", "if", "than", "too", "very",
-            "just", "about", "also", "this", "that", "these", "those", "it", "its",
-            "he", "she", "they", "we", "you", "i", "me", "my", "your", "his",
-            "her", "our", "their", "what", "which", "who", "whom", "where",
-            "when", "why", "how", "all", "each", "every", "both", "few", "more",
-            "most", "other", "some", "such", "no", "only", "own", "same", "then",
-        }
-        words = re.findall(r"[a-zA-Z]{3,}", text.lower())
-        filtered = [w for w in words if w not in stop_words]
-        counts = Counter(filtered)
-        return [word for word, _ in counts.most_common(top_n)]
-
     def get_trending_topics(self, days: int = 7, top_n: int = 10) -> Dict:
         """Identify trending topics across recent dates."""
         all_articles = self._load_all_articles()
@@ -71,20 +51,10 @@ class TrendService:
 
         sorted_dates = sorted(all_articles.keys(), reverse=True)[:days]
 
-        keyword_by_date: Dict[str, Counter] = {}
-        for date_str in sorted_dates:
-            counter: Counter = Counter()
-            for article in all_articles[date_str]:
-                headline = article.get("headline", "")
-                lead = article.get("lead", "")
-                body_text = ""
-                for section in article.get("body", []):
-                    if isinstance(section, dict):
-                        body_text += " " + section.get("section", "") + " " + section.get("content", "")
-                full_text = f"{headline} {lead} {body_text}"
-                keywords = self._extract_keywords(full_text, top_n=20)
-                counter.update(keywords)
-            keyword_by_date[date_str] = counter
+        # Number of stories mentioning each name/phrase, per day
+        keyword_by_date: Dict[str, Counter] = {
+            date_str: Counter(article_topics(all_articles[date_str])) for date_str in sorted_dates
+        }
 
         # Aggregate across all dates
         total_counts: Counter = Counter()
@@ -93,7 +63,7 @@ class TrendService:
 
         # Detect growth: compare recent vs older
         recent_dates = sorted_dates[: max(1, len(sorted_dates) // 2)]
-        older_dates = sorted_dates[max(1, len(sorted_dates) //):]
+        older_dates = sorted_dates[max(1, len(sorted_dates) // 2):]
 
         recent_counts: Counter = Counter()
         older_counts: Counter = Counter()
@@ -103,7 +73,7 @@ class TrendService:
             older_counts.update(keyword_by_date.get(d, Counter()))
 
         trending = []
-        for word, count in total_counts.most_common(top_n * 3):
+        for word, count in total_counts.items():
             recent = recent_counts.get(word, 0)
             older = older_counts.get(word, 0)
             growth = ((recent - older) / max(older, 1)) * 100
@@ -115,7 +85,8 @@ class TrendService:
                 "growth_pct": round(growth, 1),
             })
 
-        trending.sort(key=lambda x: x["growth_pct"], reverse=True)
+        # Most-covered first; growth and longer (more specific) names break ties
+        trending.sort(key=lambda x: (-x["total_count"], -x["growth_pct"], -len(x["keyword"].split()), x["keyword"]))
         trending = trending[:top_n]
 
         return {

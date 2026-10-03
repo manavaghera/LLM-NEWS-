@@ -17,37 +17,18 @@ class Settings:
     APP_NAME: str = "AI NewsSense API"
     VERSION: str = "1.0.0"
     DEBUG: bool = os.getenv("DEBUG", "False").lower() == "true"
-    
-    # LLM API Keys
-    OPENAI_API_KEY: str = os.getenv('OPENAI_API_KEY', '')
-    PERPLEXITY_API_KEY: str = os.getenv('PERPLEXITY_API_KEY', '')
-    ANTHROPIC_API_KEY: str = os.getenv('ANTHROPIC_API_KEY', '')
-    ALIBABA_LLM_KEY: str = os.getenv('ALIBABA_LLM_KEY', '')
-    ALIBABA_LLM_KEY_KG: str = os.getenv('ALIBABA_LLM_KEY_KG', '')  
-    GEMINI_API_KEY: str = os.getenv('GEMINI_API_KEY', '')
-    
-    # CORS Configuration
-    ALLOWED_ORIGINS: list = ["*"]  # In production, replace with specific origins
-    
-    # Cache Configuration
-    CACHE_TTL: int = 3600  # 1 hour
-    
-    # Default date for news - will be overridden by most recent available date
-    DEFAULT_NEWS_DATE: str = "2025-06-14"
 
-    SUMMARY_DATE: str = "2025-07-25"
-    
-    @property
-    def get_default_news_date(self) -> str:
-        """Get the most recent available date dynamically"""
-        static_dir = Path("static/articles")
-        if not static_dir.exists():
-            return self.DEFAULT_NEWS_DATE
-        
-        date_dirs = [d.name for d in static_dir.iterdir() if d.is_dir()]
-        if not date_dirs:
-            return self.DEFAULT_NEWS_DATE
-        
-        return max(date_dirs)
+    # Provider keys/models live in core/providers.py; the Knowledge Graph is a separate DashScope app
+    ALIBABA_LLM_KEY_KG: str = os.getenv('ALIBABA_LLM_KEY_KG', '')
 
-settings = Settings() 
+    # CORS: comma-separated origins allowed to call the API from a browser
+    ALLOWED_ORIGINS: list = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "*").split(",") if o.strip()]
+
+    # Writable folder for generated translations, digests and audio (static/ is read-only in Docker)
+    CACHE_DIR: Path = Path(os.getenv("CACHE_DIR", "cache"))
+
+    # Public address of the site, used in share previews and the RSS feed (e.g. https://news.example.com).
+    # When empty, the address of the incoming request is used.
+    PUBLIC_BASE_URL: str = os.getenv("PUBLIC_BASE_URL", "").rstrip("/")
+
+settings = Settings()

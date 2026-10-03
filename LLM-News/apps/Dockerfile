@@ -14,15 +14,12 @@ COPY requirements.txt .
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
+# Copy application code (see .dockerignore: no frontend, tests, local venv or generated news)
 COPY . .
 
-# Accept build argument
-ARG REACT_APP_API_URL=/api
-ENV REACT_APP_API_URL=$REACT_APP_API_URL
-
-# Create non-root user
+# Create non-root user; cache/ holds generated translations, digests and audio
 RUN adduser --disabled-password --gecos '' appuser && \
+    mkdir -p /app/cache && \
     chown -R appuser:appuser /app
 USER appuser
 
@@ -30,4 +27,4 @@ USER appuser
 EXPOSE 8000
 
 # Run the application
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"] 
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

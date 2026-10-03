@@ -1,0 +1,11 @@
+# Backend image: only app/ and requirements.txt are needed
+web
+.venv
+static
+cache
+tests
+**/__pycache__
+.pytest_cache
+*.md
+docker-compose*.y*ml
+Makefile
