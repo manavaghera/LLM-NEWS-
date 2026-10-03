@@ -1,5 +1,7 @@
 import json
 import logging
+import re
+import zlib
 from pathlib import Path
 from typing import Dict, List, Optional, Union
 from ..core.config import settings
@@ -14,12 +16,35 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+IMAGE_FILE = re.compile(r"group_\d+\.(jpg|png|webp|gif)")
+
+
+def group_number(group_id: str) -> int:
+    """"group_12" -> 12, for ordering"""
+    tail = group_id.rsplit("_", 1)[-1]
+    return int(tail) if tail.isdigit() else 0
+
+
+def image_url(date: str, group_id: str, article: Dict) -> str:
+    """The article's image, using the file name the pipeline recorded (its real format), else group_N.jpg"""
+    name = str(article.get("image_file") or "")
+    return f"/static/images/{date}/{name if IMAGE_FILE.fullmatch(name) else f'{group_id}.jpg'}"
+
+
+def thumb_url(date: str, article: Dict) -> Optional[str]:
+    """Small WebP version of the image for cards (made by the pipeline), when it exists"""
+    name = str(article.get("image_thumb") or "")
+    if not re.fullmatch(r"group_\d+\.thumb\.webp", name) or not Path(f"static/images/{date}/{name}").is_file():
+        return None
+    return f"/static/images/{date}/{name}"
+
+
 class NewsService:
     def __init__(self):
         self.articles_cache: Dict[str, Dict] = {}
+        self.cache_signatures: Dict[str, tuple] = {}
         self.categories_cache: Dict[str, Dict] = {}
         self.resources_cache: Dict[str, Dict] = {}
-        self.conversation_memory: Dict[str, List[Dict]] = {}
     
     def safe_float(self, value: Union[str, int, float], default: float = 0.0) -> float:
         """Safely convert a value to float, handling strings and None"""
@@ -40,14 +65,19 @@ class NewsService:
             return default
     
     def load_articles_for_date(self, date: str) -> Dict:
-        """Load all articles for a specific date"""
-        if date in self.articles_cache:
-            return self.articles_cache[date]
-        
+        """Load all articles for a specific date (cached until the files on disk change)"""
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date or ""):
+            return {}
+
         articles_dir = Path(f"static/articles/{date}")
         if not articles_dir.exists():
             return {}
-        
+
+        # File names + modification times: new, regenerated or deleted articles invalidate the cache
+        signature = tuple(sorted((p.name, p.stat().st_mtime_ns) for p in articles_dir.glob("group_*.json")))
+        if date in self.articles_cache and self.cache_signatures.get(date) == signature:
+            return self.articles_cache[date]
+
         articles = {}
         categories = {}
         
@@ -76,30 +106,61 @@ class NewsService:
                 logger.error(f"Error loading article {article_file}: {e}")
         
         self.articles_cache[date] = articles
+        self.cache_signatures[date] = signature
         self.categories_cache[date] = categories
         return articles
     
     def get_article(self, date: str, group_id: str) -> Optional[Dict]:
-        """Get a specific article by date and group ID"""
-        articles = self.load_articles_for_date(date)
-        return articles.get(group_id)
-    
+        """Get a specific article by date and group ID, with the URL of its image"""
+        article = self.load_articles_for_date(date).get(group_id)
+        return {**article, "image_url": image_url(date, group_id, article)} if article else None
+
+    def news_item(self, date: str, group_id: str, article: Dict) -> Dict:
+        """Card-sized summary of an article for lists"""
+        sections = [s for s in article.get("body", []) if isinstance(s, dict)]
+        publishers = sorted({str(p) for s in sections for p in s.get("Publishers", []) or []})
+        sources = {str(url) for s in sections for url in s.get("sources", []) or []}
+        lead = article.get("lead", "")
+        url = image_url(date, group_id, article)
+        return {
+            "id": zlib.crc32(f"{date}/{group_id}".encode()),  # stable across restarts, unlike hash()
+            "group_id": group_id,
+            "headline": article.get("headline", ""),
+            "subheadline": article.get("subheadline", ""),
+            "category": article.get("category", "general"),
+            "content": lead,
+            "summary": lead[:200] + "..." if len(lead) > 200 else lead,
+            "date": date,
+            "image_url": url,
+            "has_image": Path(url.lstrip("/")).is_file(),
+            "image_credit": article.get("image_credit"),
+            "thumb_url": thumb_url(date, article),
+            "publishers": publishers,
+            "source_count": len(sources),
+            "claim_check": article.get("claim_check"),
+            "outlets_compared": len((article.get("coverage") or {}).get("perspectives", [])),
+        }
+
     def get_categories(self, date: str) -> Dict:
         """Get categories for a specific date"""
         self.load_articles_for_date(date)  # This loads categories too
         return self.categories_cache.get(date, {})
     
-    def get_most_recent_date(self) -> str:
-        """Get the most recent available date"""
+    def available_dates(self) -> List[str]:
+        """Every edition with articles, newest first"""
         static_dir = Path("static/articles")
         if not static_dir.exists():
-            return "2025-06-14"  # fallback
-        
-        date_dirs = [d.name for d in static_dir.iterdir() if d.is_dir()]
-        if not date_dirs:
-            return "2025-06-14"  # fallback
-        
-        return max(date_dirs)
+            return []
+        return sorted(
+            (d.name for d in static_dir.iterdir()
+             if d.is_dir() and re.fullmatch(r"\d{4}-\d{2}-\d{2}", d.name) and any(d.glob("group_*.json"))),
+            reverse=True,
+        )
+
+    def get_most_recent_date(self) -> str:
+        """The newest edition, or "" when there are no articles yet"""
+        dates = self.available_dates()
+        return dates[0] if dates else ""
     
     def fuzzy_search_articles(self, articles: List[Dict], search_term: str, threshold: int = 70) -> List[Dict]:
         """
@@ -163,18 +224,9 @@ class NewsService:
         
         # Convert to list format expected by frontend
         news_list = []
-        for group_id, article in articles.items():
-            news_item = {
-                "id": hash(group_id),
-                "group_id": group_id,
-                "headline": article.get("headline", ""),
-                "category": article.get("category", "general"),
-                "content": article.get("lead", ""),
-                "summary": article.get("lead", "")[:200] + "..." if len(article.get("lead", "")) > 200 else article.get("lead", ""),
-                "date": date,
-                "image_url": f"/static/images/{date}/{group_id}.jpg"
-            }
-            
+        for group_id, article in sorted(articles.items(), key=lambda kv: group_number(kv[0])):
+            news_item = self.news_item(date, group_id, article)
+
             # Apply category filter
             if category and category.lower() != "all":
                 if article.get("category", "").lower() != category.lower():
@@ -234,13 +286,11 @@ class NewsService:
                 all_regions = []
                 
                 for section in body_sections:
-                    # Handle sentiment with safe conversion
-                    sentiment = self.safe_float(section.get('sentisement_from_the_content'))
-                    sentiment_scores.append(sentiment)
-                    
-                    # Handle fake news probability with safe conversion
-                    fake_prob = self.safe_float(section.get('fake_news_probability'))
-                    fake_news_probs.append(fake_prob)
+                    # Skip missing scores: counting them as 0 told the assistant unscored articles were 0% fake
+                    if section.get('sentisement_from_the_content') is not None:
+                        sentiment_scores.append(self.safe_float(section.get('sentisement_from_the_content')))
+                    if section.get('fake_news_probability') is not None:
+                        fake_news_probs.append(self.safe_float(section.get('fake_news_probability')))
                     
                     # Handle publishers and regions safely
                     publishers = section.get('Publishers', [])
@@ -251,9 +301,9 @@ class NewsService:
                     if isinstance(regions, list):
                         all_regions.extend(regions)
                 
-                # Calculate averages safely
-                avg_sentiment = sum(sentiment_scores) / len(sentiment_scores) if sentiment_scores else 0
-                avg_fake_prob = sum(fake_news_probs) / len(fake_news_probs) if fake_news_probs else 0
+                # Calculate averages safely ("not scored" when no section has the metric)
+                avg_sentiment = f"{sum(sentiment_scores) / len(sentiment_scores):.2f}" if sentiment_scores else "not scored"
+                avg_fake_prob = f"{sum(fake_news_probs) / len(fake_news_probs):.2f}" if fake_news_probs else "not scored"
                 
                 # Get unique values safely
                 unique_publishers = list(set(str(p) for p in all_publishers if p))
@@ -261,8 +311,8 @@ class NewsService:
                 
                 context += f"""
                     KEY METRICS:
-                    - Average Sentiment: {avg_sentiment:.2f}
-                    - Average Fake News Probability: {avg_fake_prob:.2f}
+                    - Average Sentiment: {avg_sentiment}
+                    - Average Fake News Probability: {avg_fake_prob}
                     - Total Unique Publishers: {len(unique_publishers)}
                     - Regions Covered: {len(unique_regions)}
                     - Publisher Diversity: {', '.join(unique_publishers[:5])}
@@ -286,6 +336,9 @@ class NewsService:
     
     def get_rag_context(self, group_id: str, date: str, query: str) -> str:
         """Get relevant context from resources for RAG - FIXED type handling"""
+        # Both values come from the browser and build a file path: only allow real IDs/dates
+        if not re.fullmatch(r"group_\d+", group_id or "") or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date or ""):
+            return ""
         resources_dir = Path(f"static/resources/{date}")
         if not resources_dir.exists():
             return ""

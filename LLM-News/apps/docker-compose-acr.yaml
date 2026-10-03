@@ -1,20 +1,23 @@
-version: '3.8'
-
+# Same stack as docker-compose.yml, but using images pushed to Alibaba Cloud Container Registry
+# (see Makefile: make build-push). The backend is only reachable through the frontend's nginx.
 services:
   backend:
     image: ${ALIYUN_REGISTRY:-registry.example.com}/${ALIYUN_NAMESPACE:-llm-newshub}/${ALIYUN_BACKEND_IMAGE:-newsense-backend}:latest
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
     environment:
       - DEBUG=false
-      - ALLOWED_HOSTS=*
+      # Only nginx can reach the backend, so its X-Forwarded-For header identifies visitors for rate limits
+      - TRUST_PROXY_HEADERS=true
     volumes:
       - ./static:/app/static:ro
+      - cache:/app/cache  # generated translations, digests, audio and reader reports
     env_file:
       - ../.env
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      # python:3.11-slim has no curl
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -26,13 +29,15 @@ services:
     depends_on:
       - backend
     restart: unless-stopped
-    environment:
-      - REACT_APP_API_URL=${REACT_APP_API_URL:-http://localhost:8000}
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:80"]
+      # 127.0.0.1, not localhost: in Alpine localhost resolves to IPv6 first and nginx listens on IPv4
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:80"]
       interval: 30s
       timeout: 10s
       retries: 3
+
+volumes:
+  cache:
 
 networks:
   default:

@@ -4,9 +4,9 @@
 
 ### AI-Powered News Intelligence Platform
 
-[![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
-[![React](https://img.shields.io/badge/React-18-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://reactjs.org)
+[![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.142-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![React](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev)
 [![Docker](https://img.shields.io/badge/Docker-24-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://docker.com)
 [![scikit-learn](https://img.shields.io/badge/scikit--learn-F7931E?style=for-the-badge&logo=scikit-learn&logoColor=white)](https://scikit-learn.org)
 
@@ -37,6 +37,14 @@ LLM-NewsHub automates the entire news production workflow using cutting-edge AI:
 | **Generate** | Creates full articles with LLMs, including images and audio |
 | **Deliver** | Serves everything through a modern React + FastAPI web app |
 
+There are two ways to produce the news:
+
+- **Quick news** (`pipeline/quick_news.py`, recommended): public RSS feeds + one AI key. Groups the same
+  event across outlets, writes articles, fact-checks every sentence against its sources, compares how
+  outlets covered multi-source stories, and adds images and audio. Runs in a few minutes.
+- **Full pipeline** (`pipeline/run.py`): the original research pipeline above. Needs Reddit and
+  RapidAPI keys, Kaggle datasets and trained classifiers.
+
 ---
 
 ## Key Features
@@ -48,11 +56,21 @@ LLM-NewsHub automates the entire news production workflow using cutting-edge AI:
 - **LLM Article Generation** — Multi-model support (GPT-4, Qwen, Gemini, Perplexity)
 - **Multimedia Production** — Stable Diffusion images, TTS audio, Wav2Lip video sync
 
-### New Features
-- **Trend Analysis Engine** — Detects trending topics, category shifts, and sentiment patterns across dates
-- **Multi-language Translation** — Translates articles to 10+ languages via LLM
-- **Smart News Digest** — AI-powered daily digests with category breakdowns and key highlights
-- **Fuzzy Search** — Typo-tolerant article search using fuzzy string matching
+### Trust
+- **Every claim sourced** — numbered citations link each section to the original reporting
+- **Fact-check pass** — a second model checks every sentence against the sources and removes
+  unsupported ones; the article shows what was removed and why (`CHECK_MODEL` can be a different model)
+- **"How each outlet covered it"** — angle, tone, emphasis and omissions per outlet for multi-source stories
+- **Accuracy tracking** — share of statements removed per day and per model, plus reader reports, on Trends
+- **Full text only where allowed** — articles are fetched only from publishers that haven't opted out of
+  AI use and whose robots.txt allows it; everything else uses RSS summaries
+
+### Reading
+- **Web app** — front page by category, archive search, follow topics ("For you"), saved stories
+- **Chat** — streaming answers that cite the article's sources or the day's stories
+- **Daily digest** with a spoken briefing; per-article audio, also in 10 translated languages
+- **Trends** — named topics, coverage and tone by category, publishers cited
+- **Sharing** — link previews for chat apps and social sites, RSS feed, optional daily email
 
 ---
 
@@ -112,12 +130,14 @@ LLM-NewsHub automates the entire news production workflow using cutting-edge AI:
 
 | Technology | Purpose |
 |-----------|---------|
-| FastAPI | REST API backend |
-| React 18 (TypeScript) | Frontend UI |
-| Material UI | Component library |
+| FastAPI | REST API backend, streaming chat (server-sent events) |
+| React 19 + TypeScript + Vite | Frontend (`LLM-News/apps/web`) |
+| TanStack Query, React Router | Data loading and routing |
+| Tailwind CSS, Radix UI | Styling and accessible dialogs |
 | Recharts | Data visualization |
-| Docker Compose | Containerized deployment |
-| Nginx | Reverse proxy |
+| edge-tts | Spoken summaries and briefings |
+| SQLite | Reader reports |
+| Docker Compose + Nginx | Containerized deployment and reverse proxy |
 
 </details>
 
@@ -138,28 +158,28 @@ LLM-NewsHub automates the entire news production workflow using cutting-edge AI:
 ## Quick Start
 
 ```bash
-# 1. Clone the repo
+# 1. Clone and configure (all commands from LLM-News/)
 git clone https://github.com/manavaghera/LLM-NEWS-.git
-cd LLM-NEWS-
+cd LLM-NEWS-/LLM-News
+cp .env.example .env        # add an AI key, e.g. OPENROUTER_API_KEY, and LLM_PUBLISHER=OPENROUTER
 
-# 2. Setup environment
-conda create -n llm-news python=3.10
-conda activate llm-news
-pip install -r requirements.txt
-python setup_nltk.py
+# 2. Write today's news (Python 3.11)
+python -m venv .venv
+.venv/bin/pip install -r requirements/quick_news.txt     # Windows: .venv\Scripts\pip
+.venv/bin/python pipeline/quick_news.py
 
-# 3. Configure API keys
-cp .env.example .env
-# Edit .env with your keys
+# 3. Run the website with Docker...
+cd apps && docker compose up --build                     # http://localhost:3000
 
-# 4. Run the full pipeline
-python pipeline/run.py --date "2025-06-21"
-
-# 5. Launch the web app
-cd apps && docker compose up
+# ...or without Docker (two terminals; see LLM-News/apps/README.md)
+cd apps && python -m venv .venv && .venv/bin/pip install -r requirements.txt
+.venv/bin/python -m uvicorn app.main:app --port 8000
+cd apps/web && npm ci && npm run dev                     # http://localhost:5173
 ```
 
-Visit `http://localhost:3000`
+`pipeline/daily_update.py --every 07:00` refreshes the news every morning (and prepares the digest and
+briefing). The original full pipeline is still available: `python pipeline/run.py --date YYYY-MM-DD`
+(see `LLM-News/quick_start.md`).
 
 ---
 
@@ -170,11 +190,20 @@ Visit `http://localhost:3000`
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/health` | Health check |
-| GET | `/api/news` | List news articles |
-| GET | `/api/news/articles/{date}/{group_id}` | Get article by ID |
-| POST | `/api/chat` | Chat with news assistant |
-| GET | `/api/config` | Get app configuration |
+| GET | `/api/health` | Health check and configured AI providers |
+| GET | `/api/news?date=` | Stories of an edition |
+| GET | `/api/news/dates` | Every edition (`?limit=` for the newest N) |
+| GET | `/api/news/search?q=` | Search every edition |
+| GET | `/api/news/articles/{date}/{group_id}` | Full article |
+| GET | `/api/news/articles/{date}/{group_id}/related` | Earlier coverage of the same story |
+| POST | `/api/chat/stream` | Chat (server-sent events, cites numbered sources) |
+| GET | `/api/chat/models` | Models the chat can use |
+| GET | `/api/audio/article/{date}/{group_id}/{lang}` | Spoken summary (English or a translation) |
+| POST | `/api/reports` | Reader reports a problem (list: `GET` with `X-Admin-Token`) |
+| GET | `/share/{date}/{group_id}` | Link-preview page for chat apps and social sites |
+| GET | `/feed.xml` | RSS feed |
+
+AI endpoints are rate-limited per visitor (`AI_RATE_LIMIT`) and capped per day (`AI_DAILY_CALL_LIMIT`).
 
 </details>
 
@@ -187,6 +216,7 @@ Visit `http://localhost:3000`
 | GET | `/api/trends/categories` | Category-level article count trends |
 | GET | `/api/trends/sentiment` | Sentiment tracking per category |
 | GET | `/api/trends/publishers` | Publisher & regional diversity analysis |
+| GET | `/api/trends/accuracy` | Fact-check results per day and model, reader reports |
 
 </details>
 
@@ -206,7 +236,8 @@ Visit `http://localhost:3000`
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/digest/daily/{date}` | Generate daily news digest |
+| GET | `/api/digest/daily/{date}` | Daily news digest (written once, then saved) |
+| GET | `/api/digest/daily/{date}/audio` | The digest read aloud |
 | GET | `/api/digest/daily` | Digest for latest date |
 | POST | `/api/digest/category` | Category-specific digest |
 
@@ -222,8 +253,12 @@ LLM-NewsHub/
 │   ├── app/                 #   FastAPI backend
 │   │   ├── api/endpoints/   #     REST API endpoints
 │   │   ├── services/        #     Business logic
-│   │   └── core/            #     Configuration
-│   └── frontend/            #   React frontend (TypeScript)
+│   │   └── core/            #     Configuration, AI providers, rate limits
+│   ├── tests/               #   Backend tests (pytest)
+│   └── web/                 #   React frontend (Vite + TypeScript)
+├── pipeline/                # quick_news.py (RSS news), daily_update.py, email_digest.py,
+│                            #   news_checks.py (fact-check), full_text.py, media.py; run.py (full pipeline)
+├── tests/                   # Pipeline tests
 ├── scrapers/                # Data collection
 │   ├── fundus/              #   News article scraper
 │   ├── reddit/              #   Reddit scraper
@@ -240,7 +275,6 @@ LLM-NewsHub/
 │   ├── summary/             #   Video summary
 │   └── video/               #   Wav2Lip
 ├── evaluate/                # Quality evaluation (BLEU, ROUGE)
-├── pipeline/                # Pipeline orchestration
 └── infrastructure/          # Airflow & cloud
 ```
 
@@ -251,9 +285,16 @@ LLM-NewsHub/
 | Requirement | Minimum | Recommended |
 |------------|---------|-------------|
 | OS | macOS / Linux / Windows | Linux |
-| Python | 3.10+ | 3.10 |
-| RAM | 8GB | 16GB |
-| Docker | Optional | Required for web app |
+| Python | 3.11 (website, quick news) | 3.11 |
+| Node.js | 22 (website) | 22 |
+| RAM | 2GB (website, quick news); 8GB+ (full pipeline) | 16GB for the full pipeline |
+| Docker | Optional | Easiest way to run the website |
+
+Tests: `cd LLM-News/apps && python -m pytest tests`, `cd LLM-News && python -m pytest tests`,
+`cd LLM-News/apps/web && npm test`, and browser tests with `npm run test:e2e` (Playwright). GitHub Actions
+runs them all on every push and pull request.
+
+To put the site online with HTTPS, see "Put it online" in [LLM-News/apps/README.md](LLM-News/apps/README.md).
 
 ---
 

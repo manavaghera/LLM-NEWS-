@@ -1,8 +1,12 @@
 import json
 import logging
+import re
 from pathlib import Path
 from typing import Dict, List, Optional
 from collections import defaultdict
+
+from ..core.config import settings
+from .completion_client import CompletionClient
 
 logger = logging.getLogger(__name__)
 
@@ -11,15 +15,44 @@ class DigestService:
     def __init__(self):
         self._client = None
 
+    def cache_path(self, date: str) -> Path:
+        return settings.CACHE_DIR / "digests" / f"{date}.json"
+
+    def cached_digest(self, date: str, max_articles: int = 20) -> Optional[Dict]:
+        """The saved digest, if it was written from the articles currently on disk"""
+        path = self.cache_path(date)
+        try:
+            saved = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+        if saved.get("signature") == self._signature(date) and saved.get("max_articles") == max_articles:
+            return saved.get("digest")
+        return None
+
+    def _signature(self, date: str) -> List[List]:
+        files = Path(f"static/articles/{date}").glob("group_*.json")
+        return sorted([p.name, p.stat().st_mtime_ns] for p in files)
+
+    def generate_daily_digest(self, date: str, max_articles: int = 20) -> Dict:
+        """Daily digest. Written once per set of article files (each generation is an LLM call) and
+        saved to disk, so restarts don't pay for it again."""
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date or ""):
+            raise ValueError(f"Invalid date '{date}', expected YYYY-MM-DD")
+        cached = self.cached_digest(date, max_articles)
+        if cached:
+            return cached
+        digest = self._build_daily_digest(date, max_articles)
+        if not digest.get("error") and digest.get("total_articles"):
+            path = self.cache_path(date)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps({"signature": self._signature(date), "max_articles": max_articles,
+                                        "digest": digest}, ensure_ascii=False), encoding="utf-8")
+        return digest
+
     def _get_llm_client(self):
-        """Lazy-load the LLM client."""
+        """Lazy-load the LLM client (first provider with an API key)."""
         if self._client is None:
-            import sys
-            project_root = Path(__file__).resolve().parent.parent.parent.parent
-            if str(project_root) not in sys.path:
-                sys.path.insert(0, str(project_root))
-            from llm_client import LLMClient
-            self._client = LLMClient(publisher="OPENAI")
+            self._client = CompletionClient()
         return self._client
 
     def _load_articles_for_date(self, date: str) -> List[Dict]:
@@ -75,7 +108,7 @@ class DigestService:
 
         return "\n".join(parts)
 
-    def generate_daily_digest(self, date: str, max_articles: int = 20) -> Dict:
+    def _build_daily_digest(self, date: str, max_articles: int = 20) -> Dict:
         """Generate a smart daily news digest for a given date."""
         articles = self._load_articles_for_date(date)
         if not articles:
@@ -118,13 +151,14 @@ class DigestService:
             "Return the output as JSON with keys: overview, highlights (list), category_summary (dict), trends."
         )
 
-        client = self._get_llm_client()
+        error = False
         try:
+            client = self._get_llm_client()
             response = client.generate(
                 prompt_content=f"Today's Date: {date}\n\nArticles:\n{all_summaries}",
                 system_content=system_prompt,
                 temperature=0.3,
-                model="gpt-4o-mini",
+                response_format={"type": "json_object"},
             )
             raw = response.choices[0].message.content.strip()
             # Parse JSON from response
@@ -143,6 +177,7 @@ class DigestService:
                     digest_data = {"overview": raw, "highlights": [], "category_summary": {}, "trends": ""}
         except Exception as e:
             logger.error(f"LLM digest generation failed: {e}")
+            error = True
             digest_data = {
                 "overview": f"Digest generation failed: {str(e)}",
                 "highlights": [],
@@ -158,6 +193,7 @@ class DigestService:
             "category_summary": digest_data.get("category_summary", {}),
             "trends": digest_data.get("trends", ""),
             "category_breakdown": category_breakdown,
+            "error": error,
         }
 
     def generate_category_digest(self, date: str, category: str) -> Dict:
@@ -192,7 +228,7 @@ class DigestService:
                 prompt_content=f"Date: {date}, Category: {category}\n\nArticles:\n{all_summaries}",
                 system_content=system_prompt,
                 temperature=0.3,
-                model="gpt-4o-mini",
+                response_format={"type": "json_object"},
             )
             raw = response.choices[0].message.content.strip()
             try:

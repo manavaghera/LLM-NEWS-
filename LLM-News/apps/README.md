@@ -1,140 +1,94 @@
-# Quick Start
+# NewsSense web app
+
+FastAPI backend (`app/`) and React frontend (`web/`). It shows the articles in `static/articles/`, written
+by `../pipeline/quick_news.py` (or the full pipeline via `../migrate.py`).
+
+## Run it
+
+**Docker** (from this folder): `docker compose up --build`, then open http://localhost:3000.
+nginx serves the frontend and forwards `/api`, `/static`, `/share` and `/feed.xml` to the backend.
+
+**Without Docker** (Python 3.11, Node 22), two terminals:
 
 ```bash
-docker-compose -f apps/docker-compose.yml build backend
-docker-compose -f apps/docker-compose.yml build frontend
+# backend
+python -m venv .venv
+.venv/bin/pip install -r requirements.txt        # Windows: .venv\Scripts\pip
+.venv/bin/python -m uvicorn app.main:app --port 8000
+
+# frontend
+cd web && npm ci && npm run dev                   # http://localhost:5173 (proxies to port 8000)
 ```
 
-For cloud deployment notes, see `../infrastructure/alibaba-cloud/`.
+Settings come from `../.env` (template: `../.env.example`): an AI key (`OPENROUTER_API_KEY`,
+`OPENAI_API_KEY`, ...), optional model overrides, `AI_RATE_LIMIT`, `AI_DAILY_CALL_LIMIT`,
+`PUBLIC_BASE_URL` (for share previews and RSS when public), `ALLOWED_ORIGINS` and `ADMIN_TOKEN`.
 
-
-# AI NewsSense - Restructured Backend
-
-This is the active web application for the LLM-NewsHub showcase. The FastAPI backend uses the modular `apps/app/` structure, and the old backend implementation has been archived under `infrastructure/legacy-backend/`.
-
-## Project Structure
+## Structure
 
 ```
-apps/
-├── app/
-│   ├── __init__.py
-│   ├── main.py                 # FastAPI application entry point
-│   ├── core/
-│   │   ├── __init__.py
-│   │   └── config.py          # Configuration and settings
-│   ├── api/
-│   │   ├── __init__.py
-│   │   ├── api.py             # Main API router
-│   │   └── endpoints/
-│   │       ├── __init__.py
-│   │       ├── health.py      # Health check endpoints
-│   │       ├── news.py        # News-related endpoints
-│   │       └── chat.py        # Chat/AI endpoints
-│   ├── services/
-│   │   ├── __init__.py
-│   │   ├── llm_service.py     # LLM integration service
-│   │   ├── news_service.py    # News operations service
-│   │   └── chat_service.py    # Chat/conversation service
-│   ├── schemas/
-│   │   ├── __init__.py
-│   │   ├── chat.py            # Chat-related Pydantic models
-│   │   └── news.py            # News-related Pydantic models
-│   └── models/
-│       └── __init__.py
-├── requirements.txt
-├── Dockerfile
-├── docker-compose.yml
-└── README.md
+app/
+├── main.py                  # app, CORS, static files (path-traversal safe), error handlers
+├── core/
+│   ├── config.py            # settings from ../.env
+│   ├── providers.py         # AI providers and models (shared with ../llm_client.py)
+│   └── limits.py            # per-visitor rate limit and daily AI-call cap
+├── api/endpoints/           # news, chat, digest, translate, audio, trends, reports, config, health,
+│                            # public (share previews, RSS)
+└── services/                # news, archive (search, earlier coverage), chat, llm, digest,
+                             # translation, audio, trends, topics, reports
+web/src/
+├── pages/                   # Home, Article, Digest, Trends, Search, Saved
+├── components/              # article, chat, news, trends, layout, ui
+├── api/                     # typed API client, queries, chat stream reader
+└── lib/                     # formatting, safe citation/markdown parsing, saved stories
+tests/                       # backend tests
 ```
 
-## Key Improvements
+Generated translations, digests, audio and reader reports are written to `cache/` (a Docker volume),
+because `static/` is mounted read-only in Docker.
 
-### 1. **Modular Architecture**
-- Separated concerns into distinct modules (services, schemas, API endpoints)
-- Following dependency injection principles
-- Clear separation between business logic and API routes
+## Tests
 
-### 2. **Service Layer Pattern**
-- `LLMService`: Handles all LLM integrations with fallback mechanisms
-- `NewsService`: Manages article loading, caching, and filtering
-- `ChatService`: Orchestrates conversations between users and AI
-
-### 3. **Schema Validation**
-- Pydantic models for request/response validation
-- Type safety throughout the application
-- Clear API documentation through schemas
-
-### 4. **Configuration Management**
-- Centralized configuration in `core/config.py`
-- Environment-based settings
-- Easy to modify and extend
-
-## API Endpoints
-
-### Health
-- `GET /api/health` - Health check and service status
-
-### News
-- `GET /api/news` - Get news articles with filtering
-- `GET /api/news/articles/{date}/{group_id}` - Get specific article
-- `GET /api/news/categories/{date}` - Get categories for date
-
-### Chat
-- `POST /api/chat` - Chat with AI assistant
-
-## Running the Application
-
-### Using Docker Compose (Recommended)
 ```bash
-# From the apps directory
-docker compose up
+.venv/bin/python -m pytest tests                  # backend
+cd web && npm run lint && npm test && npm run build
 ```
 
-### Using Python directly
+Browser tests (Playwright) start the backend on the fixed news in `web/e2e/fixtures/` with no AI key,
+start the frontend, and click through the site in Chromium:
+
 ```bash
-# Install dependencies
-pip install -r requirements.txt
-
-# Run the application
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+cd web
+npx playwright install chromium                   # once
+PYTHON=../.venv/bin/python npm run test:e2e       # Windows: $env:PYTHON='../.venv/Scripts/python'
 ```
 
-### Environment Variables
-The application looks for a `.env` file in the project root directory:
-```
-OPENAI_API_KEY=your_openai_key
-ALIBABA_LLM_KEY=your_alibaba_key
-GEMINI_API_KEY=your_gemini_key
-PERPLEXITY_API_KEY=your_perplexity_key
-ANTHROPIC_API_KEY=your_anthropic_key
-DEBUG=false
-```
+## Put it online
 
-You can use the provided template:
+`docker-compose.prod.yml` adds [Caddy](https://caddyserver.com) in front of the site. It gets a free
+HTTPS certificate from Let's Encrypt, renews it, and redirects http to https.
+
+1. A Linux server with Docker, ports 80 and 443 open, and a DNS `A` record pointing your domain at it.
+2. In `../.env`: `DOMAIN=news.example.com`, an AI key, and `ADMIN_TOKEN` if you want to read reader
+   reports. `PUBLIC_BASE_URL` is set to `https://$DOMAIN` for you.
+3. Copy the news (`static/`) to the server, or run the news script there.
+4. Start it:
+
+   ```bash
+   docker compose --env-file ../.env -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+   ```
+
+Only Caddy is reachable from outside; the backend counts visitors (for rate limits) from the address
+Caddy saw (`PROXY_COUNT=2`). Keep `AI_DAILY_CALL_LIMIT` set so a busy day can't run up the AI bill.
+To try it on your own computer first, use `DOMAIN=localhost` (Caddy then uses its own local certificate,
+which browsers warn about).
+
+## Reader reports
+
+Reports from the article page's "Report a problem" button are stored in `cache/reports.db`, without any
+personal data. Set `ADMIN_TOKEN` in `../.env` and read them with:
+
 ```bash
-# Copy the template to the root directory
-cp env_template.txt ../.env
-# Then edit ../.env with your actual API keys
+curl -H "X-Admin-Token: <your token>" http://localhost:3000/api/reports
 ```
-
-## Benefits of This Structure
-
-1. **Maintainability**: Clear separation of concerns makes the code easier to maintain
-2. **Testability**: Each service can be tested independently
-3. **Scalability**: Easy to add new features without affecting existing code
-4. **Type Safety**: Pydantic schemas ensure data validation
-5. **Documentation**: Auto-generated API docs via FastAPI
-6. **Performance**: Better caching and memory management
-7. **Error Handling**: Centralized error handling and logging
-
-## Migration from Old Structure
-
-The original 535-line `main.py` has been broken down as follows:
-- Configuration → `core/config.py`
-- LLM clients → `services/llm_service.py`
-- News operations → `services/news_service.py`
-- Chat logic → `services/chat_service.py`
-- API routes → `api/endpoints/`
-- Data models → `schemas/`
-
-This structure follows FastAPI best practices and makes the codebase much more maintainable and scalable. 

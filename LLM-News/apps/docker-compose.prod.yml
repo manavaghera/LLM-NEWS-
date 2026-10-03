@@ -1,0 +1,33 @@
+# Public server with HTTPS: adds Caddy in front of the site (see README.md, "Put it online").
+#   docker compose --env-file ../.env -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+# Needs DOMAIN in ../.env, a DNS record pointing DOMAIN at this server, and ports 80 and 443 open.
+services:
+  backend:
+    environment:
+      - PROXY_COUNT=2  # visitors reach the backend through Caddy, then nginx
+      - PUBLIC_BASE_URL=https://${DOMAIN:?Set DOMAIN in ../.env}
+
+  frontend:
+    ports: !reset []  # only reachable through Caddy
+    expose:
+      - "80"
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"  # HTTP/3
+    environment:
+      - DOMAIN=${DOMAIN:?Set DOMAIN in ../.env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data  # certificates: keep them, Let's Encrypt limits how often they can be issued
+      - caddy_config:/config
+    depends_on:
+      - frontend
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:

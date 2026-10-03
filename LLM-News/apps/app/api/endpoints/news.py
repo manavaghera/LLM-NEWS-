@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional
+from ...services import archive
 from ...services.news_service import NewsService
 from ...core.config import settings
 from pathlib import Path
@@ -25,6 +26,19 @@ async def get_news(
         return news_service.get_filtered_news(date, category, search, fuzzy)  # Pass fuzzy parameter
     except Exception as e:
         raise HTTPException(status_code=500, detail="Failed to fetch news")
+
+@router.get("/search")
+async def search_archive(
+    q: str = Query(..., min_length=2, max_length=200, description="Words to find in any edition"),
+    limit: int = Query(40, ge=1, le=100),
+):
+    """Stories from every edition containing all the words, newest edition first"""
+    return archive.search_archive(news_service, q, limit)
+
+@router.get("/articles/{date}/{group_id}/related")
+async def related_articles(date: str, group_id: str):
+    """Earlier coverage of the same story in previous editions"""
+    return archive.related_articles(news_service, date, group_id)
 
 @router.get("/articles/{date}/{group_id}")
 async def get_article(date: str, group_id: str):
@@ -77,26 +91,15 @@ async def get_categories_by_date(date: str):
         raise HTTPException(status_code=500, detail="Failed to fetch categories")
 
 @router.get("/dates")
-async def get_available_dates():
-    """Get available dates from the static directory"""
+async def get_available_dates(
+    limit: int = Query(0, ge=0, le=3650, description="Newest N editions; 0 = the whole archive"),
+):
+    """Every edition that has articles, newest first"""
     try:
-        static_dir = Path("static/articles")
-        if not static_dir.exists():
-            return {"dates": [], "total": 0}
-        
-        # Get all date directories
-        date_dirs = [d.name for d in static_dir.iterdir() if d.is_dir()]
-        
-        # Sort dates in descending order (newest first)
-        sorted_dates = sorted(date_dirs, reverse=True)
-        
-        # Take the latest 7 dates
-        latest_dates = sorted_dates[:7]
-        
-        return {
-            "dates": latest_dates,
-            "total": len(latest_dates)
-        }
+        dates = news_service.available_dates()
+        if limit:
+            dates = dates[:limit]
+        return {"dates": dates, "total": len(dates)}
     except Exception as e:
         raise HTTPException(
             status_code=500,

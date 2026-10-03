@@ -1,0 +1,87 @@
+{
+  "category": "social",
+  "headline": "UN extends Haiti security mission",
+  "subheadline": "The Security Council voted to keep the Kenya-led force for six months.",
+  "lead": "The UN Security Council extended the Haiti mission led by Kenya for six more months.",
+  "body": [
+    {
+      "section": "The vote",
+      "content": "The UN Security Council voted to extend the mission.<a href='https://example.com/haiti-1'>[1]</a>",
+      "sources": [
+        "https://example.com/haiti-1"
+      ],
+      "sentisement_from_the_content": 0.1,
+      "date": "2026-01-02",
+      "Publisher_region_diversity": [
+        "ca"
+      ],
+      "Publishers": [
+        "CBCNews"
+      ]
+    },
+    {
+      "section": "On the ground",
+      "content": "Gangs still control much of the capital.<a href='https://example.org/haiti-2'>[2]</a>",
+      "sources": [
+        "https://example.org/haiti-2"
+      ],
+      "sentisement_from_the_content": -0.5,
+      "date": "2026-01-02",
+      "Publisher_region_diversity": [
+        "qa"
+      ],
+      "Publishers": [
+        "AlJazeera"
+      ]
+    }
+  ],
+  "conclusion": "The force stays until mid-year.",
+  "timeline": {
+    "2026-01-02": "Mandate extended"
+  },
+  "summary_speech": "The UN extended the Haiti mission.",
+  "generated_by": "quick_news (OPENROUTER / writer-model)",
+  "claim_check": {
+    "checked": true,
+    "statements": 5,
+    "model": "checker-model",
+    "basis": "the source headlines and summaries",
+    "removed": [
+      {
+        "text": "The vote was unanimous.",
+        "reason": "No source gives the vote count."
+      }
+    ]
+  },
+  "coverage": {
+    "perspectives": [
+      {
+        "publisher": "CBCNews",
+        "region": "ca",
+        "angle": "Leads with the vote.",
+        "tone": 0.2,
+        "emphasis": "UN process",
+        "not_mentioned": [
+          "gang control"
+        ],
+        "links": [
+          "https://example.com/haiti-1"
+        ]
+      },
+      {
+        "publisher": "AlJazeera",
+        "region": "qa",
+        "angle": "Leads with gang violence.",
+        "tone": -0.6,
+        "emphasis": "security",
+        "not_mentioned": [],
+        "links": [
+          "https://example.org/haiti-2"
+        ]
+      }
+    ],
+    "common_ground": "The mission was extended for six months.",
+    "differences": "Focus differs.",
+    "basis": "each outlet's headline and summary"
+  }
+}

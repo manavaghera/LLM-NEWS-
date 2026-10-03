@@ -4,7 +4,6 @@ PROJECT ?= llm-newshub
 BACKEND_IMAGE = $(REGISTRY)/$(PROJECT)/newsense-backend
 FRONTEND_IMAGE = $(REGISTRY)/$(PROJECT)/newsense-frontend
 TAG = latest
-REACT_APP_API_URL ?= http://localhost:8000
 
 # Build platforms
 PLATFORM = linux/amd64
@@ -42,9 +41,8 @@ build-backend:
 build-frontend:
 	@echo "Building frontend image..."
 	docker buildx build --platform $(PLATFORM) \
-		--build-arg REACT_APP_API_URL=$(REACT_APP_API_URL) \
 		-t $(FRONTEND_IMAGE):$(TAG) \
-		./frontend
+		./web
 
 # Build both images
 .PHONY: build
@@ -80,10 +78,9 @@ build-push-fast:
 		.
 	@echo "Building and pushing frontend..."
 	docker buildx build --platform $(PLATFORM) \
-		--build-arg REACT_APP_API_URL=http://backend:8000 \
 		-t $(FRONTEND_IMAGE):$(TAG) \
 		--push \
-		./frontend
+		./web
 
 # Clean local images
 .PHONY: clean

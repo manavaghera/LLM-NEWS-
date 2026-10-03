@@ -22,7 +22,7 @@ if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
 # Use relative import
-from llm_client import LLMClient
+from llm_client import LLMClient, LLM_PUBLISHER, LLM_MODEL
 from generate_article.prompt import get_prompt_templates, format_prompt
 import argparse
 
@@ -227,10 +227,11 @@ def generate_article(date_str: str, model: str):
             comments=comments_json
         )
 
-        model = 'qwen-plus'
+        # Set LLM_PUBLISHER / LLM_MODEL in .env (default: ALIBABA / qwen-plus)
+        model = LLM_MODEL
         # model = 'qwen-max-latest'
         # model = 'qwen-vl-max'
-        publisher = 'ALIBABA'
+        publisher = LLM_PUBLISHER
 
         # model = 'gpt-4o'     
         # publisher = 'OPENAI'

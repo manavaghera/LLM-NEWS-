@@ -1,8 +1,9 @@
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
-pydantic==2.5.0
-python-dotenv==1.0.0
-aiohttp==3.9.0
-python-multipart==0.0.6 
+fastapi==0.142.2
+uvicorn[standard]==0.54.0
+pydantic==2.13.5
+python-dotenv==1.2.4
+aiohttp==3.14.3
+openai==3.24.0
 fuzzywuzzy
-dashscope
+dashscope==1.27.7
+edge-tts==7.2.8

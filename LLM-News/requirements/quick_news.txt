@@ -1,0 +1,10 @@
+# Lightweight news generation: pipeline/quick_news.py (RSS feeds + one LLM)
+openai>=1.86.0
+python-dotenv==1.1.0
+feedparser==6.0.11
+scikit-learn==1.7.0
+edge-tts==7.2.8
+pillow==12.3.0
+fundus==0.5.7
+# fundus 0.5.7 imports a curl_cffi function removed in 0.16
+curl_cffi==0.15.0

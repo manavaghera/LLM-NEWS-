@@ -1,0 +1,20 @@
+{
+  "category": "social",
+  "headline": "UN Security Council debates Haiti mission",
+  "lead": "The UN Security Council debated the Haiti mission led by Kenya.",
+  "body": [
+    {
+      "section": "Debate",
+      "content": "Members discussed the mission.<a href='https://example.com/haiti-0'>[1]</a>",
+      "sources": [
+        "https://example.com/haiti-0"
+      ],
+      "Publishers": [
+        "CBCNews"
+      ],
+      "Publisher_region_diversity": [
+        "ca"
+      ]
+    }
+  ]
+}

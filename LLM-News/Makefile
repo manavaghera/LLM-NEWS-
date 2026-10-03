@@ -30,7 +30,7 @@ setup-nltk-alt:
 # Start frontend application
 run-frontend:
 	@echo "Starting frontend..."
-	cd apps/frontend && npm start
+	cd apps/web && npm run dev
 
 # Start backend API
 run-backend:
