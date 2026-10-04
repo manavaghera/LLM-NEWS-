@@ -53,6 +53,7 @@ def test_claim_check_removes_only_unsupported_sentences():
     assert article["timeline"] == {"2026-09-30": "Mandate extended"}
     assert record["checked"] and record["statements"] == 7 and len(record["removed"]) == 4
     assert "S1.2: The vote was 15-0." in fake.prompts[0]
+    assert "[1] CBCNews, published 2026-09-30: UN extends Haiti force" in fake.prompts[0]  # timeline dates are checkable
 
 
 def test_compare_coverage_keeps_only_real_outlets():

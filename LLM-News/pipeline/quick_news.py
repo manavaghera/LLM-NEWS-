@@ -88,6 +88,8 @@ Rules:
 - When a story has several items, use and cite all of them so readers see every publisher's reporting.
 - "sentiment" is the tone of that section, from -1.0 (very negative) to 1.0 (very positive).
 - Timeline keys are dates (YYYY-MM-DD) taken from the items' published dates.
+- If an item looks back at past events (a retrospective, book excerpt, review or anniversary piece), say so in the
+  headline (e.g. "Book excerpt: ...") instead of presenting the past events as new.
 
 Reply with JSON exactly in this shape:
 {{"articles": [{{
