@@ -1,4 +1,5 @@
-"""Pages for other apps rather than the website: link previews (/share/...) and the RSS feed (/feed.xml).
+"""Pages for other apps rather than the website: link previews (/share/...), the RSS feed (/feed.xml),
+and robots.txt and sitemap.xml for search engines.
 
 Chat apps and social sites don't run JavaScript, so they can't read the single-page app's titles.
 A shared /share/{date}/{group} link serves the preview tags they look for, then forwards people
@@ -15,12 +16,13 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, Response
 
 from ...core.config import settings
-from ...services.news_service import NewsService
+from ...services.news_service import NewsService, group_number
 
 router = APIRouter()
 news_service = NewsService()
 
 FEED_SIZE = 30
+SITEMAP_LIMIT = 50_000  # the sitemap protocol's maximum
 SITE_NAME = "NewsSense"
 
 
@@ -76,20 +78,32 @@ def share_article(date: str, group_id: str, request: Request):
 </head><body><p><a href="{escape(page)}">Continue to the article</a></p></body></html>""")
 
 
+def published_at(item: dict) -> datetime:
+    """When the update that added the story ran; 06:00 UTC on its date for stories from before updates had times"""
+    try:
+        added = datetime.fromisoformat(item.get("added_at") or "")
+        if added.tzinfo:
+            return added
+    except ValueError:
+        pass
+    return datetime.strptime(item["date"], "%Y-%m-%d").replace(hour=6, tzinfo=timezone.utc)
+
+
 @router.get("/feed.xml")
 def rss_feed(request: Request):
     """RSS 2.0 feed of the newest stories across editions"""
     base = site_url(request)
     items = []
     for date in news_service.available_dates():
-        items += news_service.get_filtered_news(date)
+        # newest update first within an edition (stories without a time came first that day)
+        items += sorted(news_service.get_filtered_news(date), key=lambda i: i.get("added_at") or "", reverse=True)
         if len(items) >= FEED_SIZE:
             break
 
     entries = []
     for item in items[:FEED_SIZE]:
         link = escape(f"{base}/article/{item['date']}/{item['group_id']}")
-        published = format_datetime(datetime.strptime(item["date"], "%Y-%m-%d").replace(hour=6, tzinfo=timezone.utc))
+        published = format_datetime(published_at(item))
         entries.append(f"""    <item>
       <title>{escape(item['headline'])}</title>
       <link>{link}</link>
@@ -112,3 +126,25 @@ def rss_feed(request: Request):
 </rss>
 """
     return Response(content=xml, media_type="application/rss+xml")
+
+
+@router.get("/robots.txt")
+def robots_txt(request: Request):
+    """Search engines may read everything but the API; the sitemap lists every article"""
+    return Response(f"User-agent: *\nDisallow: /api/\n\nSitemap: {site_url(request)}/sitemap.xml\n", media_type="text/plain")
+
+
+@router.get("/sitemap.xml")
+def sitemap(request: Request):
+    """The site's main pages and every article in the archive"""
+    base = escape(site_url(request))
+    dates = news_service.available_dates()
+    urls = [(f"{base}/", dates[0] if dates else None)] + [(f"{base}/{page}", None) for page in ("digest", "trends", "about")]
+    for date in dates:
+        for group_id in sorted(news_service.load_articles_for_date(date), key=group_number):
+            urls.append((f"{base}/article/{date}/{group_id}", date))
+    entries = "".join(
+        f"  <url><loc>{loc}</loc>{f'<lastmod>{day}</lastmod>' if day else ''}</url>\n" for loc, day in urls[:SITEMAP_LIMIT]
+    )
+    xml = f'<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n{entries}</urlset>\n'
+    return Response(content=xml, media_type="application/xml")

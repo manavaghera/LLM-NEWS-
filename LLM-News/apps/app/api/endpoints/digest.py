@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
-from ...core.limits import BudgetExceeded, limit_ai_requests
+from ...core.limits import BudgetExceeded, limit_ai_requests, limit_uncached_ai_requests
 from ...services.audio_service import audio_cache, briefing_script, speak
 from ...services.digest_service import DigestService
 from ...services.news_service import NewsService
@@ -69,7 +69,7 @@ async def get_daily_briefing_audio(date: str):
     return FileResponse(path, media_type="audio/mpeg")
 
 
-@router.post("/category", dependencies=[Depends(limit_ai_requests)])
+@router.post("/category", dependencies=[Depends(limit_uncached_ai_requests)])
 def get_category_digest(request: CategoryDigestRequest):
     """Generate a digest for a specific category on a given date."""
     try:

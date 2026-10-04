@@ -173,3 +173,53 @@ def test_update_status_for_the_countdown(static_root):
     path = write_article(static_root, "2026-10-04", "group_1", "Hourly story")
     path.write_text(json.dumps({**json.loads(path.read_text()), "added_at": "2026-10-04T14:05:00+05:30"}))
     assert client.get("/api/news?date=2026-10-04").json()[0]["added_at"] == "2026-10-04T14:05:00+05:30"
+
+
+def test_one_visitor_cannot_use_up_the_days_ai(monkeypatch):
+    monkeypatch.setattr(limits, "ai_visitor_daily_limiter",
+                        limits.RateLimiter(2, 24 * 3600, "You've reached today's limit of 2 AI questions."))
+    from app.api.endpoints import chat
+    monkeypatch.setattr(chat.llm_service, "pick_client", lambda model=None: None)
+    for _ in range(2):
+        assert client.post("/api/chat/stream", json={"message": "hi"}).status_code == 200
+    response = client.post("/api/chat/stream", json={"message": "hi"})
+    assert response.status_code == 429
+    assert response.json()["detail"] == "You've reached today's limit of 2 AI questions. Try again in 24 hours."
+    assert int(response.headers["Retry-After"]) > 23 * 3600
+    assert client.post("/api/translate/text", json={"text": "hola", "target_language": "en"}).status_code == 429
+    assert (limits.wait_text(45), limits.wait_text(600), limits.wait_text(32400)) == ("45 seconds", "10 minutes", "9 hours")
+
+
+def test_search_engines_get_robots_and_a_sitemap_of_every_article(static_root, monkeypatch):
+    write_article(static_root, "2026-10-03", "group_1", "Older")
+    write_article(static_root, "2026-10-04", "group_2", "Second")
+    write_article(static_root, "2026-10-04", "group_10", "Tenth")
+    robots = client.get("/robots.txt").text
+    assert "Disallow: /api/" in robots and "Sitemap: http://testserver/sitemap.xml" in robots
+
+    monkeypatch.setattr("app.api.endpoints.public.settings.PUBLIC_BASE_URL", "https://news.example.com")
+    response = client.get("/sitemap.xml")
+    assert response.headers["content-type"].startswith("application/xml")
+    ns = {"s": "http://www.sitemaps.org/schemas/sitemap/0.9"}
+    urls = [(u.findtext("s:loc", namespaces=ns), u.findtext("s:lastmod", namespaces=ns))
+            for u in ET.fromstring(response.content).findall("s:url", ns)]
+    assert urls[0] == ("https://news.example.com/", "2026-10-04")
+    assert urls[-3:] == [("https://news.example.com/article/2026-10-04/group_2", "2026-10-04"),
+                         ("https://news.example.com/article/2026-10-04/group_10", "2026-10-04"),
+                         ("https://news.example.com/article/2026-10-03/group_1", "2026-10-03")]
+
+
+def test_rss_puts_hourly_stories_first_with_their_real_time(static_root):
+    write_article(static_root, "2026-10-04", "group_1", "Morning story")
+    later = write_article(static_root, "2026-10-04", "group_2", "Afternoon story")
+    later.write_text(json.dumps({**json.loads(later.read_text()), "added_at": "2026-10-04T15:12:00+05:30"}))
+    items = ET.fromstring(client.get("/feed.xml").content).findall("channel/item")
+    assert [i.findtext("title") for i in items] == ["Afternoon story", "Morning story"]
+    assert items[0].findtext("pubDate") == "Sun, 04 Oct 2026 15:12:00 +0530"
+
+
+def test_contact_email_only_when_it_looks_like_one(monkeypatch):
+    monkeypatch.setenv("CONTACT_EMAIL", "corrections@example.com")
+    assert client.get("/api/config").json()["contact_email"] == "corrections@example.com"
+    monkeypatch.setenv("CONTACT_EMAIL", "not an <email>")
+    assert client.get("/api/config").json()["contact_email"] == ""
