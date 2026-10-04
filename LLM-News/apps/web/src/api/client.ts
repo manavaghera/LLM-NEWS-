@@ -10,6 +10,7 @@ import type {
   PublisherDiversityResponse,
   RelatedItem,
   ReportRequest,
+  SiteConfig,
   SentimentTrendsResponse,
   TopicsResponse,
   TranslateResponse,
@@ -67,6 +68,7 @@ export const api = {
   models: () => request<ModelsResponse>('/api/chat/models'),
   related: (date: string, groupId: string) => request<RelatedItem[]>(`/api/news/articles/${q(date)}/${q(groupId)}/related`),
   updateStatus: () => request<UpdateStatus>('/api/news/status'),
+  config: () => request<SiteConfig>('/api/config'),
   accuracy: (days: number) => request<AccuracyResponse>(`/api/trends/accuracy?days=${days}`),
   report: (report: ReportRequest) =>
     request<{ status: string }>('/api/reports', { method: 'POST', body: JSON.stringify(report) }),

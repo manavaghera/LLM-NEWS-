@@ -222,3 +222,8 @@ export interface UpdateStatus {
   interval_minutes: number | null
   added: number
 }
+
+/** Site settings the pages need (GET /api/config) */
+export interface SiteConfig {
+  contact_email: string
+}

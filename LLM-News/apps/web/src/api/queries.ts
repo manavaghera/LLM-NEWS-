@@ -45,6 +45,8 @@ export const useLanguages = () => useQuery({ queryKey: ['languages'], queryFn: a
 
 export const useModels = () => useQuery({ queryKey: ['models'], queryFn: api.models, staleTime: HOUR })
 
+export const useSiteConfig = () => useQuery({ queryKey: ['config'], queryFn: api.config, staleTime: HOUR })
+
 export const useTranslate = () =>
   useMutation({
     mutationFn: ({ date, groupId, language }: { date: string; groupId: string; language: string }) =>

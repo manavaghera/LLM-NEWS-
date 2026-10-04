@@ -31,6 +31,7 @@ export default defineConfig({
         // One per provider in app/core/providers.py.
         OPENROUTER_API_KEY: '', OPENAI_API_KEY: '', ALIBABA_LLM_KEY: '', GEMINI_API_KEY: '', PERPLEXITY_API_KEY: '',
         NVIDIA_API_KEY: '',
+        CONTACT_EMAIL: '',
       },
       reuseExistingServer: false,
       timeout: 60_000,
