@@ -38,6 +38,13 @@ def headline_names(article: Dict, topics: Set[str], broad: Set[str]) -> Set[str]
     return {t for t in topics if t in words and t not in broad}
 
 
+def with_headline_names(article: Dict, topics: Set[str], other_topics: Set[str]) -> Set[str]:
+    """Adds the other article's single-word names that this headline mentions. The body may only use them
+    at a sentence start, where they look ambiguous ("Brazil's presidential election ..." after a full stop)."""
+    words = set(re.findall(r"\w+", article.get("headline", "")))
+    return topics | {t for t in other_topics if " " not in t and t in words}
+
+
 def related_articles(news: NewsService, date: str, group_id: str, limit: int = 5, days: int = 30) -> List[Dict]:
     """Earlier coverage of the same running story: articles from previous editions (up to `days`
     back) sharing named topics with this one; strongest match first, then the most recent"""
@@ -51,14 +58,14 @@ def related_articles(news: NewsService, date: str, group_id: str, limit: int = 5
     }
     today = [topics_of(a) for a in news.load_articles_for_date(date).values()]
     broad = broad_topics([today] + [[t for _, t in stories.values()] for stories in earlier.values()])
-    subject = headline_names(article, target, broad)
     matches = []
     for d, stories in earlier.items():
         for other_id, (other, other_topics) in stories.items():
-            strong = subject & headline_names(other, other_topics, broad)
-            score = shared_story_score(target, other_topics, strong)
+            mine, theirs = with_headline_names(article, target, other_topics), with_headline_names(other, other_topics, target)
+            strong = headline_names(article, mine, broad) & headline_names(other, theirs, broad)
+            score = shared_story_score(mine, theirs, strong)
             if score:
-                shared = sorted(target & other_topics, key=lambda t: (t not in strong and " " not in t, -len(t.split()), t))
+                shared = sorted(mine & theirs, key=lambda t: (t not in strong and " " not in t, -len(t.split()), t))
                 matches.append((score, d, other_id, other, shared))
     matches.sort(key=lambda m: m[1], reverse=True)  # newest first...
     matches.sort(key=lambda m: -m[0])                # ...within equal scores
