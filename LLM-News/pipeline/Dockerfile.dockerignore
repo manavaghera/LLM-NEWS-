@@ -1,0 +1,6 @@
+# The build context is LLM-News/ (old pipeline, data, models): send only what the news updater needs
+*
+!llm_client.py
+!requirements/quick_news.txt
+!apps/app/core/providers.py
+!pipeline/*.py
