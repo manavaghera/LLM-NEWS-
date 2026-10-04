@@ -98,9 +98,22 @@ HTTPS certificate from Let's Encrypt, renews it, and redirects http to https.
    ```
 
 Only Caddy is reachable from outside; the backend counts visitors (for rate limits) from the address
-Caddy saw (`PROXY_COUNT=2`). Keep `AI_DAILY_CALL_LIMIT` set so a busy day can't run up the AI bill.
+Caddy saw (`PROXY_COUNT=2`). Keep `AI_DAILY_CALL_LIMIT` and `AI_VISITOR_DAILY_LIMIT` set so a busy day,
+or one visitor, can't run up the AI bill, and set a spending limit on the AI key itself (the hourly news
+script has no cap of its own). Also set `ALLOWED_ORIGINS=https://your.domain`, `ADMIN_TOKEN` and
+`CONTACT_EMAIL` (shown on the About and Privacy pages), and keep only the keys you pay for: every key in
+`.env` appears in the chat's model menu.
 To try it on your own computer first, use `DOMAIN=localhost` (Caddy then uses its own local certificate,
 which browsers warn about).
+
+nginx serves article images and audio straight from `static/` and sends a strict Content-Security-Policy
+(`web/security-headers.conf`); logs are capped at 3 × 10 MB per service. Back up nightly:
+
+```bash
+./scripts/backup.sh /var/backups/newssense     # the news archive and the cache volume (reader reports)
+```
+
+The script's header has the cron line and how to restore. Copy the backups off the server as well.
 
 ## Reader reports
 

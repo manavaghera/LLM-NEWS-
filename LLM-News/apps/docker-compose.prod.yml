@@ -27,6 +27,11 @@ services:
     depends_on:
       - frontend
     restart: unless-stopped
+    logging:  # like the other services (docker-compose.yml)
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   caddy_data:

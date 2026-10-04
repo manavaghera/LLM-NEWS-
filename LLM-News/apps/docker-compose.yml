@@ -1,3 +1,10 @@
+# Docker's default logs grow without limit: keep at most 3 files of 10 MB per service
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   backend:
     build: .
@@ -13,6 +20,7 @@ services:
     env_file:
       - ../.env
     restart: unless-stopped
+    logging: *logging
     healthcheck:
       # python:3.11-slim has no curl
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
@@ -24,9 +32,12 @@ services:
     build: web
     ports:
       - "3000:80"
+    volumes:
+      - ./static:/usr/share/nginx/static:ro  # nginx serves article images and audio itself
     depends_on:
       - backend
     restart: unless-stopped
+    logging: *logging
     healthcheck:
       # 127.0.0.1, not localhost: in Alpine localhost resolves to IPv6 first and nginx listens on IPv4
       test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:80"]
@@ -50,6 +61,7 @@ services:
     depends_on:
       - backend
     restart: unless-stopped
+    logging: *logging
 
 volumes:
   cache:

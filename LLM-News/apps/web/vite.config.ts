@@ -21,6 +21,8 @@ export default defineConfig({
       '/static': backend,
       '/share': backend,
       '/feed.xml': backend,
+      '/robots.txt': backend,
+      '/sitemap.xml': backend,
     },
   },
   test: {

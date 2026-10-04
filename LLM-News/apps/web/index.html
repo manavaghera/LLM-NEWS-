@@ -7,15 +7,8 @@
     <meta name="description" content="AI-written daily news where every claim links to its source." />
     <link rel="alternate" type="application/rss+xml" title="NewsSense" href="/feed.xml" />
     <title>NewsSense</title>
-    <script>
-      // Apply the saved or system theme before first paint to avoid a light/dark flash
-      (function () {
-        var theme = null
-        try { theme = localStorage.getItem('newssense-theme') } catch (e) {}
-        var dark = theme ? theme === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches
-        document.documentElement.classList.toggle('dark', dark)
-      })()
-    </script>
+    <!-- Theme before first paint (no inline script, for the Content-Security-Policy) -->
+    <script src="/theme-init.js"></script>
   </head>
   <body>
     <div id="root"></div>
