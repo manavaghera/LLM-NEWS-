@@ -298,6 +298,16 @@ def build_article(draft: dict, items: list, allowed: set, category: str, date: s
 SOURCE_FIELDS = ("publisher", "region", "title", "summary", "link", "published", "text_basis")
 
 
+def held_back(article: dict) -> str:
+    """Why an article that went through the checks must not be published ("" when it can be). Unchecked
+    AI text never goes live; its links stay unused, so the next update can write and check it again."""
+    if "claim_check" not in article:
+        return "held back (the fact-check failed; the next update can retry it)"
+    if not article["body"]:
+        return "dropped (no sentence was supported by its sources)"
+    return ""
+
+
 def enrich(article: dict, cited: list) -> list:
     """Claim check, then the coverage comparison for multi-outlet stories. Returns notes for the log."""
     notes = []
@@ -421,8 +431,9 @@ def main():
             notes = []
             if not args.no_checks:
                 notes += enrich(article, cited)
-                if not article["body"]:
-                    print(f"  dropped (no sentence was supported by its sources): {article['headline']}")
+                reason = held_back(article)
+                if reason:
+                    print(f"  {reason}: {article['headline']}")
                     continue
             for section in article["body"]:
                 section.update(scorer.score_section(section["content"], section["sources"]))

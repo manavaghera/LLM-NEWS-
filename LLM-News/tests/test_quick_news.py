@@ -103,3 +103,10 @@ def test_make_thumbnail_is_a_small_webp(tmp_path):
         assert thumb.format == "WEBP" and thumb.size == (800, 480)
     (tmp_path / "broken.jpg").write_bytes(b"not an image")
     assert media.make_thumbnail(tmp_path / "broken.jpg") == ""
+
+
+def test_articles_without_a_finished_fact_check_are_held_back():
+    checked = {"claim_check": {"checked": True, "removed": []}, "body": [{"content": "Supported."}]}
+    assert q.held_back(checked) == ""
+    assert q.held_back({"body": [{"content": "Never checked."}]}).startswith("held back")  # the check call failed
+    assert q.held_back({**checked, "body": []}).startswith("dropped")                     # nothing was supported

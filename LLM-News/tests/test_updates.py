@@ -47,6 +47,16 @@ def test_status_says_when_the_next_update_is_due(tmp_path):
     assert not list(tmp_path.glob("*.part"))
 
 
+def test_a_failed_update_keeps_the_last_update_time(tmp_path):
+    first = datetime(2026, 10, 4, 14, 5, tzinfo=timezone.utc)
+    write_status(tmp_path, "2026-10-04", 60, added=2, ok=True, now=first)
+    failed = write_status(tmp_path, "2026-10-04", 60, added=0, ok=False, now=first + timedelta(hours=1))
+    assert datetime.fromisoformat(failed["last_update"]) == first          # the site keeps saying "Updated 14:05"
+    assert datetime.fromisoformat(failed["next_update"]) == first + timedelta(hours=2) and not failed["ok"]
+    partly = write_status(tmp_path, "2026-10-04", 60, added=1, ok=False, now=first + timedelta(hours=2))
+    assert datetime.fromisoformat(partly["last_update"]) == first + timedelta(hours=2)  # stories changed: it did update
+
+
 def test_hourly_run_writes_the_edition_first_then_only_updates(tmp_path, monkeypatch):
     monkeypatch.setattr(daily_update, "STATIC_DIR", tmp_path)
     edition = tmp_path / "articles" / datetime.now().strftime("%Y-%m-%d")

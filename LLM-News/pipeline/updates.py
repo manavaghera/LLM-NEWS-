@@ -49,11 +49,19 @@ def drop_covered_events(items: List[Dict], covered: List[str], threshold: float)
 
 def write_status(static_dir: Path, date: str, interval_minutes: int, added: int, ok: bool,
                  now: Optional[datetime] = None) -> Dict:
-    """Record this update and when the next one is due (times with the UTC offset, for browsers anywhere)"""
+    """Record this update and when the next one is due (times with the UTC offset, for browsers anywhere).
+    A failed run that added nothing keeps the previous update time: the site's "Updated" stays true."""
     now = (now or datetime.now()).astimezone()
+    last_update = now.isoformat(timespec="seconds")
+    if not ok and not added:
+        try:
+            previous = json.loads((static_dir / STATUS_FILE).read_text(encoding="utf-8"))
+            date, last_update = previous["date"], previous["last_update"]
+        except (OSError, ValueError, KeyError, TypeError):
+            pass
     status = {
         "date": date,
-        "last_update": now.isoformat(timespec="seconds"),
+        "last_update": last_update,
         "next_update": (now + timedelta(minutes=interval_minutes)).isoformat(timespec="seconds"),
         "interval_minutes": interval_minutes,
         "added": added,
