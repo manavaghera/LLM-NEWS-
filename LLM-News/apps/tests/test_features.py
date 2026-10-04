@@ -20,6 +20,13 @@ def test_providers_use_current_endpoints_and_models():
     assert providers.PROVIDERS["NVIDIA"].key_env == "NVIDIA_API_KEY"
 
 
+def test_browser_tests_blank_every_provider_key():
+    """The Playwright backend must not pick up a real key from .env, or its chat test calls a real AI"""
+    from pathlib import Path
+    config = (Path(__file__).resolve().parents[1] / "web" / "playwright.config.ts").read_text(encoding="utf-8")
+    assert [p.key_env for p in providers.PROVIDERS.values() if f"{p.key_env}: ''" not in config] == []
+
+
 def test_providers_prefer_llm_publisher_and_allow_model_override(monkeypatch):
     for provider in providers.PROVIDERS.values():
         monkeypatch.delenv(provider.key_env, raising=False)
