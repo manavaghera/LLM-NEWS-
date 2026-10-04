@@ -6,7 +6,7 @@ from fastapi.responses import StreamingResponse
 from ...core.limits import BudgetExceeded, limit_ai_requests
 from ...schemas.chat import ChatStreamRequest
 from ...services.chat_service import ChatService
-from ...services.llm_service import LLMService
+from ...services.llm_service import AIServiceSlow, LLMService
 from ...services.news_service import NewsService
 
 router = APIRouter()
@@ -26,7 +26,8 @@ async def chat_stream(request: ChatStreamRequest):
                 yield f"data: {json.dumps(event)}\n\n"
         except Exception as e:
             logger.error(f"Chat stream failed: {e}")
-            readable = isinstance(e, BudgetExceeded) or (isinstance(e, RuntimeError) and "No AI provider" in str(e))
+            readable = isinstance(e, (BudgetExceeded, AIServiceSlow)) or (
+                isinstance(e, RuntimeError) and "No AI provider" in str(e))
             message = str(e) if readable else "The AI service had a problem answering. Please try again."
             yield f"data: {json.dumps({'type': 'error', 'message': message})}\n\n"
         yield f"data: {json.dumps({'type': 'done'})}\n\n"

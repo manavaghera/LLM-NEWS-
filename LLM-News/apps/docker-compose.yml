@@ -34,5 +34,22 @@ services:
       timeout: 10s
       retries: 3
 
+  # New stories every UPDATE_MINUTES (default 60; set it in ../.env). It calls the AI, so it is opt-in:
+  #   docker compose --profile updates up -d --build
+  updater:
+    build:
+      context: ..
+      dockerfile: pipeline/Dockerfile
+    profiles: ["updates"]
+    env_file:
+      - ../.env
+    environment:
+      - BACKEND_URL=http://backend:8000  # prepares the digest and briefing after new stories
+    volumes:
+      - ./static:/app/apps/static  # the only service that writes the news
+    depends_on:
+      - backend
+    restart: unless-stopped
+
 volumes:
   cache:

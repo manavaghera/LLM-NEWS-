@@ -53,7 +53,11 @@ def _ask_json(client, model: str, system: str, prompt: str) -> Dict:
 
 
 def _items_block(items: List[Dict]) -> str:
-    return "\n".join(f"[{i}] {it['publisher']}: {it['title']} — {it.get('text') or it['summary']}" for i, it in enumerate(items, 1))
+    """Publication dates included: the writer builds the timeline from them"""
+    return "\n".join(
+        f"[{i}] {it['publisher']}, published {it.get('published') or 'unknown'}: {it['title']} — {it.get('text') or it['summary']}"
+        for i, it in enumerate(items, 1)
+    )
 
 
 def claim_check(article: Dict, items: List[Dict], client, model: str) -> Dict:
@@ -79,7 +83,7 @@ def claim_check(article: Dict, items: List[Dict], client, model: str) -> Dict:
     result = _ask_json(
         client, model,
         "You are a meticulous fact-checker for a news site. Reply with JSON only.",
-        f"SOURCE ITEMS (headline — summary):\n{_items_block(items)}\n\n"
+        f"SOURCE ITEMS (publisher, published date: headline — summary):\n{_items_block(items)}\n\n"
         "STATEMENTS:\n" + "\n".join(f"{sid}: {text}" for sid, text in statements.items()) + "\n\n"
         "A statement is UNSUPPORTED if it contains a fact, number, name, quote, date or cause that the source "
         "items do not contain or imply. Paraphrase and neutral framing are fine.\n"

@@ -5,11 +5,14 @@ import { useNews } from '@/api/queries'
 import type { NewsItem } from '@/api/types'
 import { FollowButton } from '@/components/news/LibraryButtons'
 import { LeadStory, StoryCard, StorySkeleton } from '@/components/news/StoryCard'
+import { UpdateTimer } from '@/components/news/UpdateTimer'
 import { Button } from '@/components/ui/button'
 import { EmptyState, ErrorState } from '@/components/ui/feedback'
 import { useEdition } from '@/hooks/useEdition'
+import { useNow } from '@/hooks/useNow'
 import { CATEGORIES, categoryInfo, formatLongDate, plural, publisherName } from '@/lib/format'
 import { matchesFollows, useLibrary } from '@/lib/library'
+import { byUpdate, newStories, pickLead } from '@/lib/updates'
 import { cn } from '@/lib/utils'
 
 const GENERATE_COMMAND = '.\\.venv\\Scripts\\python pipeline\\quick_news.py'
@@ -106,11 +109,11 @@ function NoNewsYet() {
   )
 }
 
-function Grid({ items, showCategory = true }: { items: NewsItem[]; showCategory?: boolean }) {
+function Grid({ items, showCategory = true, fresh }: { items: NewsItem[]; showCategory?: boolean; fresh: Set<string> }) {
   return (
     <div className="grid gap-x-8 gap-y-12 sm:grid-cols-2 lg:grid-cols-3">
       {items.map((item) => (
-        <StoryCard key={item.group_id} item={item} showCategory={showCategory} />
+        <StoryCard key={item.group_id} item={item} showCategory={showCategory} fresh={fresh.has(item.group_id)} />
       ))}
     </div>
   )
@@ -142,7 +145,9 @@ export function HomePage() {
   const category = params.get('category') ?? 'all'
   const query = (params.get('q') ?? '').trim()
 
-  const items = useMemo(() => news.data ?? [], [news.data])
+  const items = useMemo(() => byUpdate(news.data ?? []), [news.data])
+  const now = useNow(60_000)
+  const fresh = useMemo(() => newStories(items, now), [items, now])
   const counts = useMemo(
     () => items.reduce<Record<string, number>>((acc, item) => ({ ...acc, [item.category]: (acc[item.category] ?? 0) + 1 }), {}),
     [items],
@@ -161,9 +166,12 @@ export function HomePage() {
     <div>
       <div className="mb-6 flex flex-wrap items-baseline justify-between gap-2">
         <h1 className="headline text-4xl font-semibold tracking-tight">{edition.isLatest ? "Today's news" : 'News archive'}</h1>
-        <p className="text-sm text-muted">
-          {formatLongDate(edition.date)} · {plural(items.length, 'story')}
-        </p>
+        <div className="flex flex-col items-start gap-1 sm:items-end">
+          <p className="text-sm text-muted">
+            {formatLongDate(edition.date)} · {plural(items.length, 'story')}
+          </p>
+          {edition.isLatest && <UpdateTimer date={edition.date} />}
+        </div>
       </div>
       <CategoryBar counts={counts} />
 
@@ -175,7 +183,7 @@ export function HomePage() {
               {category !== 'all' && ` in ${categoryInfo(category).label}`}
               {query && ` matching “${query}”`}
             </p>
-            <Grid items={filtered} showCategory={category === 'all'} />
+            <Grid items={filtered} showCategory={category === 'all'} fresh={fresh} />
             {query && <ArchiveLink query={query} />}
           </section>
         ) : (
@@ -185,7 +193,7 @@ export function HomePage() {
           </EmptyState>
         )
       ) : (
-        <FrontPage items={items} />
+        <FrontPage items={items} fresh={fresh} />
       )}
     </div>
   )
@@ -201,10 +209,10 @@ function ArchiveLink({ query }: { query: string }) {
   )
 }
 
-function FrontPage({ items }: { items: NewsItem[] }) {
+function FrontPage({ items, fresh }: { items: NewsItem[]; fresh: Set<string> }) {
   const lib = useLibrary()
   const following = lib.categories.length + lib.keywords.length > 0
-  const lead = items.find((item) => item.has_image !== false && (item.source_count ?? 0) > 1) ?? items.find((item) => item.has_image !== false) ?? items[0]
+  const lead = pickLead(items)
   const rest = items.filter((item) => item !== lead)
   const known = CATEGORIES.map((c) => c.value as string)
   const sections = [
@@ -216,14 +224,14 @@ function FrontPage({ items }: { items: NewsItem[] }) {
 
   return (
     <div className="space-y-14">
-      <LeadStory item={lead} />
+      <LeadStory item={lead} fresh={fresh.has(lead.group_id)} />
       {forYou.length > 0 && (
         <section aria-labelledby="for-you" className="space-y-6 rounded-2xl bg-sunken p-6">
           <h2 id="for-you" className="flex items-center justify-between gap-3 text-sm font-semibold uppercase tracking-[0.14em]">
             For you
             <Link to="/saved" className="text-xs font-medium normal-case tracking-normal text-muted hover:text-ink">Manage topics</Link>
           </h2>
-          <Grid items={forYou} />
+          <Grid items={forYou} fresh={fresh} />
         </section>
       )}
       {sections.map((section) => (
@@ -233,7 +241,7 @@ function FrontPage({ items }: { items: NewsItem[] }) {
             {section.title}
             {section.key !== 'other' && <FollowButton kind="category" value={section.key} />}
           </h2>
-          <Grid items={section.items} showCategory={section.key === 'other'} />
+          <Grid items={section.items} showCategory={section.key === 'other'} fresh={fresh} />
         </section>
       ))}
     </div>

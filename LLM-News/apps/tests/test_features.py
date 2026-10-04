@@ -16,6 +16,15 @@ def test_providers_use_current_endpoints_and_models():
     assert providers.PROVIDERS["GEMINI"].base_url.endswith("/v1beta/openai")
     assert providers.PROVIDERS["GEMINI"].model == "gemini-2.5-flash"
     assert providers.PROVIDERS["PERPLEXITY"].model == "sonar"
+    assert providers.PROVIDERS["NVIDIA"].base_url == "https://integrate.api.nvidia.com/v1"
+    assert providers.PROVIDERS["NVIDIA"].key_env == "NVIDIA_API_KEY"
+
+
+def test_browser_tests_blank_every_provider_key():
+    """The Playwright backend must not pick up a real key from .env, or its chat test calls a real AI"""
+    from pathlib import Path
+    config = (Path(__file__).resolve().parents[1] / "web" / "playwright.config.ts").read_text(encoding="utf-8")
+    assert [p.key_env for p in providers.PROVIDERS.values() if f"{p.key_env}: ''" not in config] == []
 
 
 def test_providers_prefer_llm_publisher_and_allow_model_override(monkeypatch):
@@ -148,3 +157,19 @@ def test_rss_feed_is_valid_xml(static_root):
     items = ET.fromstring(response.content).findall("./channel/item")
     assert [i.findtext("title") for i in items] == ["Newest", "Older & wiser"]
     assert items[0].findtext("link") == "http://news.example/article/2026-01-02/group_1"
+
+
+def test_update_status_for_the_countdown(static_root):
+    assert client.get("/api/news/status").json()["next_update"] is None  # no updater has run
+    status = static_root / "static" / "update_status.json"
+    status.write_text(json.dumps({"date": "2026-10-04", "last_update": "2026-10-04T14:05:00+05:30",
+                                  "next_update": "2026-10-04T15:05:00+05:30", "interval_minutes": 60, "added": 2}))
+    assert client.get("/api/news/status").json() == {
+        "date": "2026-10-04", "last_update": "2026-10-04T14:05:00+05:30",
+        "next_update": "2026-10-04T15:05:00+05:30", "interval_minutes": 60, "added": 2}
+    status.write_text(json.dumps({"last_update": "2026-10-04T14:05:00", "next_update": "soon", "interval_minutes": 60}))
+    assert client.get("/api/news/status").json()["last_update"] is None  # broken file: no countdown
+
+    path = write_article(static_root, "2026-10-04", "group_1", "Hourly story")
+    path.write_text(json.dumps({**json.loads(path.read_text()), "added_at": "2026-10-04T14:05:00+05:30"}))
+    assert client.get("/api/news?date=2026-10-04").json()[0]["added_at"] == "2026-10-04T14:05:00+05:30"

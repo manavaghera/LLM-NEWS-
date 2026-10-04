@@ -24,8 +24,16 @@ logger = logging.getLogger(__name__)
 KNOWLEDGE_GRAPH = "knowledge-graph"
 
 
+class AIServiceSlow(RuntimeError):
+    """The provider stopped sending (busy free tiers can leave a request hanging)."""
+
+
 class HTTPLLMClient:
     """Async client for one OpenAI-compatible provider."""
+
+    # Give up after 60s without any data (thinking models send progress chunks while they think,
+    # so only a stalled request trips it) or 3 minutes in all
+    timeout = aiohttp.ClientTimeout(total=180, sock_connect=15, sock_read=60)
 
     def __init__(self, base_url: str, api_key: str):
         self.base_url = base_url
@@ -45,25 +53,29 @@ class HTTPLLMClient:
             "max_tokens": 1000,
             "stream": True
         }
-        async with aiohttp.ClientSession() as session:
-            async with session.post(f"{self.base_url}/chat/completions", headers=headers, json=payload) as response:
-                if response.status != 200:
-                    error_text = await response.text()
-                    raise RuntimeError(f"API error {response.status}: {error_text}")
-                async for raw_line in response.content:
-                    line = raw_line.decode("utf-8", errors="ignore").strip()
-                    if not line.startswith("data:"):
-                        continue  # blank lines and keep-alive comments
-                    data = line[len("data:"):].strip()
-                    if data == "[DONE]":
-                        break
-                    try:
-                        choices = json.loads(data).get("choices") or []
-                    except ValueError:
-                        continue
-                    text = choices[0].get("delta", {}).get("content") if choices else None
-                    if text:
-                        yield text
+        try:
+            async with aiohttp.ClientSession(timeout=self.timeout) as session:
+                async with session.post(f"{self.base_url}/chat/completions", headers=headers, json=payload) as response:
+                    if response.status != 200:
+                        error_text = await response.text()
+                        raise RuntimeError(f"API error {response.status}: {error_text}")
+                    async for raw_line in response.content:
+                        line = raw_line.decode("utf-8", errors="ignore").strip()
+                        if not line.startswith("data:"):
+                            continue  # blank lines and keep-alive comments
+                        data = line[len("data:"):].strip()
+                        if data == "[DONE]":
+                            break
+                        try:
+                            choices = json.loads(data).get("choices") or []
+                        except ValueError:
+                            continue
+                        # Thinking models send reasoning_content first; only the answer is shown
+                        text = choices[0].get("delta", {}).get("content") if choices else None
+                        if text:
+                            yield text
+        except asyncio.TimeoutError:
+            raise AIServiceSlow("The AI service is taking too long to answer (it may be busy). Please try again.")
 
 
 class LLMService:

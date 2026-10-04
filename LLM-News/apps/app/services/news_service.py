@@ -139,6 +139,7 @@ class NewsService:
             "source_count": len(sources),
             "claim_check": article.get("claim_check"),
             "outlets_compared": len((article.get("coverage") or {}).get("perspectives", [])),
+            "added_at": article.get("added_at"),  # the update that added it (same time for one run)
         }
 
     def get_categories(self, date: str) -> Dict:

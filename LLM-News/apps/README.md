@@ -20,7 +20,7 @@ python -m venv .venv
 cd web && npm ci && npm run dev                   # http://localhost:5173 (proxies to port 8000)
 ```
 
-Settings come from `../.env` (template: `../.env.example`): an AI key (`OPENROUTER_API_KEY`,
+Settings come from `../.env` (template: `../.env.example`): an AI key (`OPENROUTER_API_KEY`, `NVIDIA_API_KEY`,
 `OPENAI_API_KEY`, ...), optional model overrides, `AI_RATE_LIMIT`, `AI_DAILY_CALL_LIMIT`,
 `PUBLIC_BASE_URL` (for share previews and RSS when public), `ALLOWED_ORIGINS` and `ADMIN_TOKEN`.
 
@@ -64,6 +64,24 @@ npx playwright install chromium                   # once
 PYTHON=../.venv/bin/python npm run test:e2e       # Windows: $env:PYTHON='../.venv/Scripts/python'
 ```
 
+## News updates every hour
+
+`../pipeline/daily_update.py --interval 60` keeps the site current: the first run of a day writes the
+edition, then every hour it adds up to 2 stories per category about events the edition doesn't cover
+yet (follow-ups to covered stories are skipped). The front page shows "Updated 2:05 PM · next update
+in 34 min", marks the new stories, puts a story more outlets cover at the top, and reloads by itself.
+
+```bash
+cd .. && python pipeline/daily_update.py --interval 60                  # keep running in a terminal
+cd .. && python pipeline/daily_update.py --interval 60 --print-task     # or a Windows scheduled task
+docker compose --profile updates up -d --build                          # or Docker: the "updater" service
+```
+
+Each update makes about 1 AI call per category plus 2 per new story (fact-check and comparison), so
+up to ~15 calls an hour. `UPDATE_MINUTES` in `../.env` sets the Docker interval; set `TZ` (e.g.
+`Asia/Kolkata`) so editions change at your midnight. NVIDIA's free key is for testing only: a public
+site needs a paid provider.
+
 ## Put it online
 
 `docker-compose.prod.yml` adds [Caddy](https://caddyserver.com) in front of the site. It gets a free
@@ -73,10 +91,10 @@ HTTPS certificate from Let's Encrypt, renews it, and redirects http to https.
 2. In `../.env`: `DOMAIN=news.example.com`, an AI key, and `ADMIN_TOKEN` if you want to read reader
    reports. `PUBLIC_BASE_URL` is set to `https://$DOMAIN` for you.
 3. Copy the news (`static/`) to the server, or run the news script there.
-4. Start it:
+4. Start it, with hourly news updates (see below):
 
    ```bash
-   docker compose --env-file ../.env -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+   docker compose --env-file ../.env -f docker-compose.yml -f docker-compose.prod.yml --profile updates up -d --build
    ```
 
 Only Caddy is reachable from outside; the backend counts visitors (for rate limits) from the address

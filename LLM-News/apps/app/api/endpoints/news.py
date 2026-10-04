@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Query
 from typing import Optional
 from ...services import archive
 from ...services.news_service import NewsService
+from ...services.update_status import read_update_status
 from ...core.config import settings
 from pathlib import Path
 
@@ -89,6 +90,12 @@ async def get_categories_by_date(date: str):
         return news_service.get_categories(date)
     except Exception as e:
         raise HTTPException(status_code=500, detail="Failed to fetch categories")
+
+@router.get("/status")
+async def get_update_status():
+    """Last and next news update (pipeline/daily_update.py --interval); all null without a schedule"""
+    return read_update_status()
+
 
 @router.get("/dates")
 async def get_available_dates(

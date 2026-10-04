@@ -27,8 +27,10 @@ export default defineConfig({
       env: {
         CACHE_DIR: '../.cache',
         AI_RATE_LIMIT: '1000',
-        // Empty keys win over any real ones in ../.env (dotenv never overrides set variables)
+        // Empty keys win over any real ones in ../.env (dotenv never overrides set variables).
+        // One per provider in app/core/providers.py.
         OPENROUTER_API_KEY: '', OPENAI_API_KEY: '', ALIBABA_LLM_KEY: '', GEMINI_API_KEY: '', PERPLEXITY_API_KEY: '',
+        NVIDIA_API_KEY: '',
       },
       reuseExistingServer: false,
       timeout: 60_000,

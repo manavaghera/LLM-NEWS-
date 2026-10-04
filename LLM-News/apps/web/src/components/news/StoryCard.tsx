@@ -2,11 +2,11 @@ import { Link } from 'react-router'
 import type { NewsItem } from '@/api/types'
 import { cn } from '@/lib/utils'
 import { SaveButton } from './LibraryButtons'
-import { ArticleImage, Kicker, SourceLine, TrustChips } from './parts'
+import { ArticleImage, Kicker, NewBadge, SourceLine, TrustChips } from './parts'
 
 const articlePath = (item: NewsItem) => `/article/${item.date}/${item.group_id}`
 
-export function StoryCard({ item, showCategory = true }: { item: NewsItem; showCategory?: boolean }) {
+export function StoryCard({ item, showCategory = true, fresh = false }: { item: NewsItem; showCategory?: boolean; fresh?: boolean }) {
   return (
     <article className="group relative flex flex-col gap-3">
       <div className="relative">
@@ -20,7 +20,12 @@ export function StoryCard({ item, showCategory = true }: { item: NewsItem; showC
         <SaveButton article={item} variant="overlay" />
       </div>
       <div className="flex flex-col gap-2">
-        {showCategory && <Kicker category={item.category} />}
+        {(showCategory || fresh) && (
+          <div className="flex items-center gap-2">
+            {showCategory && <Kicker category={item.category} />}
+            {fresh && <NewBadge />}
+          </div>
+        )}
         <h3 className="headline text-xl leading-snug font-medium">
           <Link to={articlePath(item)} className="after:absolute after:inset-0 group-hover:underline decoration-1 underline-offset-4">
             {item.headline}
@@ -34,7 +39,7 @@ export function StoryCard({ item, showCategory = true }: { item: NewsItem; showC
   )
 }
 
-export function LeadStory({ item }: { item: NewsItem }) {
+export function LeadStory({ item, fresh = false }: { item: NewsItem; fresh?: boolean }) {
   return (
     <article className="group relative grid gap-6 border-b border-rule pb-10 md:grid-cols-[1.35fr_1fr] md:items-center">
       <div className="relative">
@@ -49,7 +54,10 @@ export function LeadStory({ item }: { item: NewsItem }) {
         <SaveButton article={item} variant="overlay" />
       </div>
       <div className="flex flex-col gap-3">
-        <Kicker category={item.category} />
+        <div className="flex items-center gap-2">
+          <Kicker category={item.category} />
+          {fresh && <NewBadge />}
+        </div>
         <h2 className="headline text-3xl leading-tight font-medium sm:text-4xl">
           <Link to={articlePath(item)} className="after:absolute after:inset-0 group-hover:underline decoration-1 underline-offset-4">
             {item.headline}

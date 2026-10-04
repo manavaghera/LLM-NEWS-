@@ -88,3 +88,14 @@ def test_earlier_coverage_by_a_shared_headline_subject(static_root):
     related = client.get("/api/news/articles/2026-01-03/group_1/related").json()
     assert [(r["date"], r["group_id"]) for r in related] == [("2026-01-02", "group_1")]
     assert related[0]["shared_topics"] == ["G7", "US"]
+
+
+def test_earlier_coverage_counts_headline_names_the_body_only_starts_a_sentence_with(static_root):
+    today = write_article(static_root, "2026-01-03", "group_1", "Brazil's Election Pits Lula Against Flávio Bolsonaro")
+    set_article(today, lead="Polls are close. Brazil's voters choose between Lula and Flávio Bolsonaro.")
+    before = write_article(static_root, "2026-01-02", "group_1", "Brazil's Presidential Election Shapes Up")
+    set_article(before, lead="The vote in Brazil is a test for Lula and the right.")
+
+    related = client.get("/api/news/articles/2026-01-03/group_1/related").json()
+    assert [(r["date"], r["group_id"]) for r in related] == [("2026-01-02", "group_1")]
+    assert related[0]["shared_topics"] == ["Brazil", "Lula"]
