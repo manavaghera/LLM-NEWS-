@@ -157,3 +157,19 @@ def test_rss_feed_is_valid_xml(static_root):
     items = ET.fromstring(response.content).findall("./channel/item")
     assert [i.findtext("title") for i in items] == ["Newest", "Older & wiser"]
     assert items[0].findtext("link") == "http://news.example/article/2026-01-02/group_1"
+
+
+def test_update_status_for_the_countdown(static_root):
+    assert client.get("/api/news/status").json()["next_update"] is None  # no updater has run
+    status = static_root / "static" / "update_status.json"
+    status.write_text(json.dumps({"date": "2026-10-04", "last_update": "2026-10-04T14:05:00+05:30",
+                                  "next_update": "2026-10-04T15:05:00+05:30", "interval_minutes": 60, "added": 2}))
+    assert client.get("/api/news/status").json() == {
+        "date": "2026-10-04", "last_update": "2026-10-04T14:05:00+05:30",
+        "next_update": "2026-10-04T15:05:00+05:30", "interval_minutes": 60, "added": 2}
+    status.write_text(json.dumps({"last_update": "2026-10-04T14:05:00", "next_update": "soon", "interval_minutes": 60}))
+    assert client.get("/api/news/status").json()["last_update"] is None  # broken file: no countdown
+
+    path = write_article(static_root, "2026-10-04", "group_1", "Hourly story")
+    path.write_text(json.dumps({**json.loads(path.read_text()), "added_at": "2026-10-04T14:05:00+05:30"}))
+    assert client.get("/api/news?date=2026-10-04").json()[0]["added_at"] == "2026-10-04T14:05:00+05:30"

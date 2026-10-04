@@ -1,4 +1,5 @@
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useEffect, useRef } from 'react'
 import { api } from './client'
 import type { ReportRequest } from './types'
 
@@ -60,3 +61,27 @@ export const useRelated = (date: string | undefined, groupId: string | undefined
 export const useAccuracy = (days: number) => useQuery({ queryKey: ['trends', 'accuracy', days], queryFn: () => api.accuracy(days) })
 
 export const useReport = () => useMutation({ mutationFn: (report: ReportRequest) => api.report(report) })
+
+/** When the news was last updated and the next update is due. Checks every minute (every 20 seconds once
+ * the update is due) and reloads the stories as soon as a new update has run. */
+export function useUpdateStatus() {
+  const client = useQueryClient()
+  const status = useQuery({
+    queryKey: ['update-status'],
+    queryFn: api.updateStatus,
+    refetchInterval: (query) => {
+      const next = Date.parse(query.state.data?.next_update ?? '')
+      return Number.isFinite(next) && next <= Date.now() ? 20_000 : 60_000
+    },
+  })
+  const last = status.data?.last_update
+  const seen = useRef(last)
+  useEffect(() => {
+    if (last && seen.current && last !== seen.current) {
+      void client.invalidateQueries({ queryKey: ['news'] })
+      void client.invalidateQueries({ queryKey: ['dates'] })
+    }
+    seen.current = last ?? seen.current
+  }, [last, client])
+  return status
+}

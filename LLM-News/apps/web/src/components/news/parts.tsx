@@ -12,6 +12,15 @@ export function Kicker({ category, className }: { category: string; className?: 
   )
 }
 
+/** Marks a story that an hourly update added. */
+export function NewBadge() {
+  return (
+    <span className="rounded-full bg-accent px-2 py-0.5 text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-accent-ink">
+      New
+    </span>
+  )
+}
+
 /** Article image; falls back to a category-tinted placeholder when missing or broken. */
 export function ArticleImage({
   src,

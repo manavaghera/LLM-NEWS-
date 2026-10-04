@@ -76,6 +76,7 @@ LLM-News/apps/static/graph/*
 LLM-News/apps/static/articles/*
 LLM-News/apps/static/resources/*
 LLM-News/apps/static/summary-video/*
+LLM-News/apps/static/update_status.json*
 
 # Node.js / React
 node_modules/

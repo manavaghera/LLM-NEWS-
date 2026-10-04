@@ -18,6 +18,8 @@ export interface NewsItem {
   source_count?: number
   claim_check?: ClaimCheck | null
   outlets_compared?: number
+  /** When the update that added it ran (one time per run); missing on older editions */
+  added_at?: string | null
 }
 
 /** Second AI pass that checked every sentence against the source items (pipeline/news_checks.py) */
@@ -210,4 +212,13 @@ export interface ReportRequest {
   group_id: string
   kind: ReportKind
   message: string
+}
+
+/** Last and next news update (pipeline/daily_update.py --interval); all null without a schedule */
+export interface UpdateStatus {
+  date: string | null
+  last_update: string | null
+  next_update: string | null
+  interval_minutes: number | null
+  added: number
 }

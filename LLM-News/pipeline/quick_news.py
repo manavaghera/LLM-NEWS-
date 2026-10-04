@@ -10,6 +10,7 @@ Usage:
     python pipeline/quick_news.py
     python pipeline/quick_news.py --date 2026-09-30 --per-category 3 --overwrite
     python pipeline/quick_news.py --no-images --no-audio
+    python pipeline/quick_news.py --update     # hourly: add stories today's edition doesn't cover yet
 
 Output (served by the website):
     apps/static/articles/{date}/group_{n}.json, group_categories.json
@@ -39,6 +40,7 @@ from news_checks import claim_check, compare_coverage
 from full_text import FullTextFetcher
 from media import best_image, download_image, make_audio, make_thumbnail
 from reliability import ReliabilityScorer
+from updates import covered_texts, drop_covered_events
 
 STATIC_DIR = ROOT_DIR / "apps" / "static"
 ARTICLES_DIR = STATIC_DIR / "articles"
@@ -321,7 +323,7 @@ def main():
 
     parser = argparse.ArgumentParser(description="Build website articles from RSS feeds with one LLM.")
     parser.add_argument("--date", default=datetime.now().strftime("%Y-%m-%d"))
-    parser.add_argument("--per-category", type=int, default=3, help="articles per category (default 3)")
+    parser.add_argument("--per-category", type=int, help="articles per category (default 3; 2 per --update)")
     parser.add_argument("--per-feed", type=int, default=6, help="newest items read from each feed (default 6)")
     parser.add_argument("--similarity", type=float, default=0.2,
                         help="how similar items must be to count as one story, 0-1 (default 0.2)")
@@ -332,9 +334,12 @@ def main():
                         help="skip the claim check and coverage comparison (2 fewer AI calls per article)")
     parser.add_argument("--overwrite", action="store_true", help="replace articles already made for this date")
     parser.add_argument("--append", action="store_true", help="add to this date's articles instead of replacing them")
+    parser.add_argument("--update", action="store_true",
+                        help="hourly update: append only stories about events this date's articles don't cover yet")
     parser.add_argument("--categories", default=",".join(FEEDS),
                         help=f"comma-separated categories to write (default: {','.join(FEEDS)})")
     args = parser.parse_args()
+    args.append = args.append or args.update
 
     try:
         datetime.strptime(args.date, "%Y-%m-%d")
@@ -359,6 +364,10 @@ def main():
                 path.unlink()
     out_dir.mkdir(parents=True, exist_ok=True)
     next_number = max((int(g.split("_")[1]) for g in categories), default=0) + 1
+    args.per_category = args.per_category or (2 if args.update and categories else 3)
+    covered = covered_texts(out_dir) if args.update else []
+    added_at = datetime.now().astimezone().isoformat(timespec="seconds")  # one time per run: the site's "New" batch
+    written = 0
 
     print(f"Date: {args.date} | LLM: {LLM_PUBLISHER} / {LLM_MODEL}")
     scorer = ReliabilityScorer(ROOT_DIR)
@@ -371,11 +380,15 @@ def main():
         print(fetcher.status())
     seen_links = previously_covered_links(args.date, include_date=args.append)
     if seen_links:
-        print(f"Skipping {len(seen_links)} links already covered on earlier dates")
+        print(f"Skipping {len(seen_links)} links already used by earlier articles")
 
     for category in chosen:
         print(f"\n[{category}] fetching feeds...")
         items = fetch_items(category, args.per_feed, seen_links, fetcher)
+        if covered:
+            items, dropped = drop_covered_events(items, covered, args.similarity)
+            if dropped:
+                print(f"[{category}] {dropped} items are about stories already covered today")
         if not items:
             print(f"[{category}] no new items, skipping")
             continue
@@ -429,9 +442,11 @@ def main():
                     image_note = f"image: {item['publisher']}"
                     break
 
+            article["added_at"] = added_at
             with open(out_dir / f"{group_id}.json", "w", encoding="utf-8") as f:
                 json.dump(article, f, ensure_ascii=False, indent=2)
             categories[group_id] = category
+            written += 1
 
             audio_note = "no audio"
             if not args.no_audio and article["summary_speech"]:
@@ -447,7 +462,7 @@ def main():
 
     with open(categories_file, "w", encoding="utf-8") as f:
         json.dump(categories, f, indent=2)
-    print(f"\nDone: {len(categories)} articles saved to {out_dir}")
+    print(f"\nDone: {written} new articles; {len(categories)} in {out_dir}")
     print("Refresh http://localhost:3000 to see them.")
 
 
