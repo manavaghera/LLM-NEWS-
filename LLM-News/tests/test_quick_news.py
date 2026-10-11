@@ -24,6 +24,17 @@ def test_expanded_categories_have_multiple_distinct_sources():
         assert all(url.startswith("https://") for url in urls)
 
 
+def test_total_feed_outage_is_distinct_from_no_new_items(monkeypatch):
+    def offline(*args, **kwargs):
+        raise OSError("offline")
+
+    monkeypatch.setattr(q.urllib.request, "urlopen", offline)
+    monkeypatch.setattr(q, "record_feed", lambda *args, **kwargs: None)
+    items = q.fetch_items("tech", 2, set())
+    assert items == [] and items.total_outage is True
+    assert items.attempted_feeds == len(q.FEEDS["tech"]) and items.successful_feeds == 0
+
+
 def test_ai_models_desk_has_specialist_sources_and_rumour_rules():
     publishers = {publisher for publisher, _, _ in q.FEEDS["ai_models"]}
     assert {"OpenAI", "GoogleAI", "HuggingFace"} <= publishers

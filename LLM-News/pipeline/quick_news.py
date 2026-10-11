@@ -52,6 +52,19 @@ AUDIO_DIR = STATIC_DIR / "audio"
 USER_AGENT = "Mozilla/5.0 (LLM-NewsHub quick_news)"
 MAX_STORY_ITEMS = 4
 
+
+class FeedItems(list):
+    """Feed items plus health data that distinguishes no new stories from a total outage."""
+
+    def __init__(self, values=(), *, attempted_feeds=0, successful_feeds=0):
+        super().__init__(values)
+        self.attempted_feeds = attempted_feeds
+        self.successful_feeds = successful_feeds
+
+    @property
+    def total_outage(self):
+        return self.attempted_feeds > 0 and self.successful_feeds == 0
+
 # category -> [(publisher, region, feed url)]; categories match the website's tabs
 FEEDS = {
     "social": [
@@ -184,7 +197,9 @@ def clean_text(raw: str, limit: int = 500) -> str:
 def fetch_items(category: str, per_feed: int, seen_links: set, fetcher=None) -> list:
     """Newest items from each feed of a category, skipping links in seen_links (and adding new ones)."""
     items = []
+    attempted_feeds = successful_feeds = 0
     for publisher, region, url in FEEDS[category]:
+        attempted_feeds += 1
         try:
             request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
             with urllib.request.urlopen(request, timeout=20) as response:
@@ -193,6 +208,8 @@ def fetch_items(category: str, per_feed: int, seen_links: set, fetcher=None) -> 
             print(f"  {publisher}: skipped ({e})")
             record_feed(publisher, url, category, False)
             continue
+
+        successful_feeds += 1
 
         added = 0
         for entry in feed.entries[:per_feed]:
@@ -218,7 +235,7 @@ def fetch_items(category: str, per_feed: int, seen_links: set, fetcher=None) -> 
         full_count = sum(1 for item in items if item["publisher"] == publisher and item["text_basis"] == "full article")
         record_feed(publisher, url, category, True, added, full_count)
         print(f"  {publisher}: {added} items" + (f" ({full_count} with full text)" if full_count else ""))
-    return items
+    return FeedItems(items, attempted_feeds=attempted_feeds, successful_feeds=successful_feeds)
 
 
 def previously_covered_links(date: str, include_date: bool = False) -> set:
@@ -442,6 +459,7 @@ def generate_edition(args, chosen, edition):
     added_at = datetime.now().astimezone().isoformat(timespec="seconds")  # one time per run: the site's "New" batch
     written, held = 0, 0
     failed_categories = []
+    attempted_feeds = successful_feeds = 0
 
     print(f"Date: {args.date} | LLM: {LLM_PUBLISHER} / {LLM_MODEL}")
     scorer = ReliabilityScorer(ROOT_DIR)
@@ -460,6 +478,8 @@ def generate_edition(args, chosen, edition):
         before_category = written
         print(f"\n[{category}] fetching feeds...")
         items = fetch_items(category, args.per_feed, seen_links, fetcher)
+        attempted_feeds += getattr(items, "attempted_feeds", 0)
+        successful_feeds += getattr(items, "successful_feeds", 0)
         if covered:
             items, dropped = drop_covered_events(items, covered, args.similarity)
             if dropped:
@@ -540,6 +560,8 @@ def generate_edition(args, chosen, edition):
         if args.overwrite and written == before_category:
             failed_categories.append(category)
 
+    if attempted_feeds and not successful_feeds:
+        sys.exit("News generation failed: every configured feed failed; the published edition was preserved.")
     if failed_categories:
         sys.exit(f"News generation failed for {', '.join(failed_categories)}; the published edition was preserved.")
     if not categories:

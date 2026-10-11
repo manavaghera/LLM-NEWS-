@@ -5,6 +5,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "pipeline"))
 
 import daily_update  # noqa: E402
@@ -74,6 +76,25 @@ def test_hourly_run_writes_the_edition_first_then_only_updates(tmp_path, monkeyp
     assert calls[1][-2:] == ["--update", "--no-audio"]    # then new stories only
     status = json.loads((tmp_path / "update_status.json").read_text(encoding="utf-8"))
     assert status["added"] == 1 and status["ok"] and status["interval_minutes"] == 60
+
+
+def test_overlapping_hourly_run_does_not_change_status_or_start_generation(tmp_path, monkeypatch):
+    monkeypatch.setattr(daily_update, "STATIC_DIR", tmp_path)
+    monkeypatch.setattr(daily_update, "acquire_update_lease", lambda owner, ttl: False)
+    monkeypatch.setattr(daily_update.subprocess, "run", lambda *args, **kwargs: pytest.fail("must not generate"))
+    assert daily_update.run_every(60, "", [], once=True) == 0
+    assert not (tmp_path / "update_status.json").exists()
+
+
+def test_lease_cleanup_failure_does_not_hide_a_successful_update(monkeypatch):
+    monkeypatch.setattr(daily_update, "acquire_update_lease", lambda owner, ttl: True)
+    monkeypatch.setattr(daily_update, "_run_once_locked", lambda *args, **kwargs: (0, 2, "2026-10-11"))
+
+    def fail_to_release(owner):
+        raise OSError("operations database temporarily unavailable")
+
+    monkeypatch.setattr(daily_update, "release_update_lease", fail_to_release)
+    assert daily_update.run_once("", False, []) == (0, 2, "2026-10-11")
 
 
 def test_scheduled_task_for_hourly_updates():

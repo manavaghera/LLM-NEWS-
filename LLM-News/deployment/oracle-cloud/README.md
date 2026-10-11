@@ -52,6 +52,8 @@ ALLOWED_HOSTS=newssense-example.duckdns.org,backend,localhost
 CONTACT_EMAIL=you@example.com
 CONTACT_ADDRESS=your-real-business-or-contact-address
 UPDATE_MINUTES=60
+STALE_AFTER_MINUTES=120
+UPDATE_LOCK_SECONDS=7200
 PIPELINE_DAILY_CALL_LIMIT=200
 PIPELINE_MONTHLY_CALL_LIMIT=4000
 ```
@@ -72,7 +74,8 @@ sudo -u newssense newssense-deploy production
 ```
 
 The command validates Compose configuration, builds all images, starts the hourly updater and fails if the
-public HTTPS readiness endpoint does not become healthy.
+public HTTPS readiness endpoint does not become healthy. Readiness includes news freshness, so a new empty
+server becomes ready only after its first successful edition is published.
 
 ## 5. Optional GitHub deployments
 

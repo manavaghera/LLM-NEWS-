@@ -12,7 +12,7 @@ APP_ENV_FILE=../.env.production docker compose -p newssense-production --env-fil
 
 Both stacks run the frontend, backend and hourly updater without a personal computer. Caddy obtains HTTPS certificates. Production Compose restricts browser origins and host headers to `DOMAIN`.
 
-Before promotion, check `/api/health/ready`. It returns HTTP 503 when HTTPS, CORS, host allow-list or the admin secret is unsafe. Check the owner dashboard for the last successful update, feed failures, held stories, API errors, slow routes and remaining daily/monthly generation allowance.
+Before promotion, check `/api/health/ready`. It returns HTTP 503 when news is stale or HTTPS, CORS, host allow-list or the admin secret is unsafe. Check the owner dashboard for the last successful update, feed failures, held stories, API errors, slow routes and remaining daily/monthly generation allowance.
 
 ## Required secrets
 

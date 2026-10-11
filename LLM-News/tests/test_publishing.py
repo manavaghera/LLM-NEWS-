@@ -166,6 +166,32 @@ def test_empty_feeds_cannot_erase_the_published_edition(writer):
     assert generation.recent_runs()[0]["status"] == "failed"
 
 
+def test_total_feed_outage_fails_an_append_instead_of_reporting_success(writer, monkeypatch):
+    original = contents(writer)
+    monkeypatch.setattr(q, "fetch_items", Mock(return_value=q.FeedItems([], attempted_feeds=4, successful_feeds=0)))
+    monkeypatch.setattr(sys, "argv", ["quick_news.py", "--date", DATE, "--update", "--categories", "tech",
+                                     "--no-images", "--no-audio", "--no-full-text"])
+    with pytest.raises(SystemExit, match="News generation failed"):
+        q.main()
+    assert contents(writer) == original
+    assert generation.recent_runs()[0]["status"] == "failed"
+
+
+def test_one_failed_category_does_not_discard_other_categories(writer, monkeypatch):
+    monkeypatch.setattr(q, "fetch_items", Mock(side_effect=[
+        q.FeedItems([], attempted_feeds=2, successful_feeds=0),
+        q.FeedItems([fake_item()], attempted_feeds=2, successful_feeds=1),
+    ]))
+    monkeypatch.setattr(q, "write_articles", Mock(return_value=[fake_draft()]))
+    monkeypatch.setattr(q, "enrich", lambda article, cited: article.update(claim_check={"checked": True}) or [])
+    monkeypatch.setattr(sys, "argv", ["quick_news.py", "--date", DATE, "--update",
+                                     "--categories", "tech,entertainment",
+                                     "--no-images", "--no-audio", "--no-full-text"])
+    q.main()
+    assert (writer[0] / "group_2.json").exists()
+    assert generation.recent_runs()[0]["status"] == "success"
+
+
 def test_failed_model_cannot_erase_the_published_edition(writer, monkeypatch):
     original = contents(writer)
     monkeypatch.setattr(q, "fetch_items", Mock(return_value=[fake_item()]))

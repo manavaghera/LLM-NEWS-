@@ -92,6 +92,15 @@ def test_feed_failures_and_held_back_runs_are_recorded_without_raw_error_text():
     assert generation.held_stories()[0]["reason"] == "held back (fact-check failed)"
 
 
+def test_update_lease_prevents_overlapping_generators():
+    assert generation.acquire_update_lease("worker-one", 60) is True
+    assert generation.acquire_update_lease("worker-two", 60) is False
+    generation.release_update_lease("worker-two")
+    assert generation.acquire_update_lease("worker-two", 60) is False
+    generation.release_update_lease("worker-one")
+    assert generation.acquire_update_lease("worker-two", 60) is True
+
+
 def test_failed_telemetry_does_not_discard_paid_response(monkeypatch):
     import llm_client
     response = SimpleNamespace(usage=None)

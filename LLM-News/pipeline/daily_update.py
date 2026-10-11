@@ -19,15 +19,19 @@ import sys
 import time
 import urllib.request
 import json
+import socket
+import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Tuple
 
 from updates import edition_files, write_status
+from apps.app.core.generation import acquire_update_lease, release_update_lease
 
 ROOT = Path(__file__).resolve().parents[1]
 STATIC_DIR = ROOT / "apps" / "static"
 DEFAULT_BACKEND = os.getenv("BACKEND_URL", "http://127.0.0.1:8000")
+UPDATE_ALREADY_RUNNING = 75
 
 
 def alert_failure(date: str) -> None:
@@ -56,6 +60,27 @@ def warm(backend_url: str, path: str) -> None:
 def run_once(backend_url: str, email: bool, news_args: list, update: bool = False) -> Tuple[int, int, str]:
     """Write the news; with update, add to today's edition when it exists. Returns (exit code, new articles, date)."""
     date = datetime.now().strftime("%Y-%m-%d")
+    owner = f"{socket.gethostname()}:{os.getpid()}:{uuid.uuid4().hex}"
+    try:
+        ttl = max(60, min(86_400, int(os.getenv("UPDATE_LOCK_SECONDS", "7200"))))
+    except ValueError:
+        ttl = 7200
+    if not acquire_update_lease(owner, ttl):
+        print(f"[{datetime.now():%Y-%m-%d %H:%M}] Another updater owns the generation lease; skipping this run")
+        return UPDATE_ALREADY_RUNNING, 0, date
+    try:
+        return _run_once_locked(date, backend_url, email, news_args, update)
+    finally:
+        try:
+            release_update_lease(owner)
+        except Exception as exc:
+            # The lease expires by itself. Do not turn a successfully published edition into a failed run
+            # merely because operational storage was briefly unavailable during cleanup.
+            print(f"  could not release updater lease immediately: {type(exc).__name__}")
+
+
+def _run_once_locked(date: str, backend_url: str, email: bool, news_args: list,
+                     update: bool = False) -> Tuple[int, int, str]:
     edition = STATIC_DIR / "articles" / date
     before = len(edition_files(edition))
     mode = ["--update"] if update and before else []
@@ -80,6 +105,11 @@ def run_every(minutes: int, backend_url: str, news_args: list, once: bool) -> in
     while True:
         started = datetime.now()
         code, added, date = run_once(backend_url, False, news_args, update=True)
+        if code == UPDATE_ALREADY_RUNNING:
+            if once:
+                return 0
+            time.sleep(max(0.0, (started + timedelta(minutes=minutes) - datetime.now()).total_seconds()))
+            continue
         status = write_status(STATIC_DIR, date, minutes, added, ok=code == 0, now=started)
         print(f"  {added} new stories; next update at {status['next_update'][11:16]}")
         if code != 0:

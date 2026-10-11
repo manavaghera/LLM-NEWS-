@@ -29,13 +29,15 @@ async def liveness():
 
 @router.get("/ready")
 async def readiness(response: Response):
+    update = read_update_status()
     checks = {
         "static_directory": Path("static").is_dir(),
         "cache_writable": settings.CACHE_DIR.exists() or settings.CACHE_DIR.parent.exists(),
+        "news_fresh": not update["stale"],
     }
     production_issues = settings.production_issues() if not settings.DEBUG else []
     ready = all(checks.values()) and not production_issues
     if not ready:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
     return {"status": "ready" if ready else "not_ready", "checks": checks,
-            "configuration_issues": production_issues, "update": read_update_status()}
+            "configuration_issues": production_issues, "update": update}

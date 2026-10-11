@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Dict
 
 NO_SCHEDULE = {"date": None, "last_update": None, "next_update": None, "interval_minutes": None,
-               "added": 0, "stale": True, "minutes_since_update": None}
+               "added": 0, "ok": None, "stale": True, "minutes_since_update": None}
 
 
 def read_update_status(static_dir: Path = Path("static"), now: datetime | None = None) -> Dict:
@@ -27,6 +27,7 @@ def read_update_status(static_dir: Path = Path("static"), now: datetime | None =
             "next_update": upcoming.isoformat(),
             "interval_minutes": interval,
             "added": int(saved.get("added", 0)),
+            "ok": saved.get("ok") if isinstance(saved.get("ok"), bool) else None,
             "stale": age_minutes > stale_after,
             "minutes_since_update": age_minutes,
         }

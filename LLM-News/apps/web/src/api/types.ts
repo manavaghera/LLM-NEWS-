@@ -314,6 +314,7 @@ export interface UpdateStatus {
   next_update: string | null
   interval_minutes: number | null
   added: number
+  ok?: boolean | null
   stale?: boolean
   minutes_since_update?: number | null
 }

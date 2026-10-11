@@ -6,7 +6,7 @@ The daily limit counts attempted pipeline calls, including failed calls, across 
 import os
 import sqlite3
 from contextlib import contextmanager
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 
@@ -48,6 +48,8 @@ def _db():
             CREATE TABLE IF NOT EXISTS generation_holds (
                 id INTEGER PRIMARY KEY, created_at TEXT NOT NULL, date TEXT NOT NULL,
                 category TEXT NOT NULL, headline TEXT NOT NULL, reason TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS generation_leases (
+                name TEXT PRIMARY KEY, owner TEXT NOT NULL, expires_at TEXT NOT NULL);
         """)
         with db:
             yield db
@@ -199,3 +201,30 @@ def held_stories():
     with _db() as db:
         return [dict(row) for row in db.execute(
             "SELECT created_at,date,category,headline,reason FROM generation_holds ORDER BY id DESC LIMIT 50")]
+
+
+def acquire_update_lease(owner: str, ttl_seconds: int = 7200) -> bool:
+    """Atomically acquire the updater lease shared through the operations database."""
+    if not owner or not 60 <= ttl_seconds <= 86_400:
+        raise ValueError("Invalid updater lease")
+    now = datetime.now(timezone.utc)
+    expires = (now + timedelta(seconds=ttl_seconds)).isoformat(timespec="seconds")
+    with _db() as db:
+        db.execute("BEGIN IMMEDIATE")
+        saved = db.execute("SELECT owner,expires_at FROM generation_leases WHERE name='news-updater'").fetchone()
+        if saved:
+            try:
+                active = datetime.fromisoformat(saved["expires_at"]) > now
+            except (TypeError, ValueError):
+                active = False
+            if active and saved["owner"] != owner:
+                return False
+        db.execute("""INSERT INTO generation_leases(name,owner,expires_at)
+                   VALUES('news-updater',?,?) ON CONFLICT(name) DO UPDATE SET
+                   owner=excluded.owner,expires_at=excluded.expires_at""", (owner, expires))
+        return True
+
+
+def release_update_lease(owner: str) -> None:
+    with _db() as db:
+        db.execute("DELETE FROM generation_leases WHERE name='news-updater' AND owner=?", (owner,))

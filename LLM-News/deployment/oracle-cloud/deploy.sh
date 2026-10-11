@@ -43,7 +43,8 @@ docker compose -p "${PROJECT}" --env-file "${ENV_FILE}" \
 docker compose -p "${PROJECT}" --env-file "${ENV_FILE}" \
   -f docker-compose.yml -f "${OVERLAY}" --profile updates up -d --build --remove-orphans
 
-for attempt in {1..24}; do
+# A first edition can take several minutes; allow 30 minutes before declaring deployment failure.
+for attempt in {1..360}; do
   if curl --fail --silent --show-error "https://${DOMAIN}/api/health/ready" >/dev/null; then
     echo "${ENVIRONMENT} is ready at https://${DOMAIN}"
     exit 0

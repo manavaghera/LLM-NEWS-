@@ -1,5 +1,6 @@
 """Authentication, spending controls and safe owner-facing operational details."""
 import json
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
@@ -79,6 +80,36 @@ def test_update_health_distinguishes_pending_and_completed_runs(telemetry, monke
     assert operations_service.operations_snapshot()["update"]["ok"] is expected
     monkeypatch.setattr(generation, "recent_runs", lambda: [])
     assert operations_service.operations_snapshot()["update"]["ok"] is None
+
+
+def test_readiness_fails_when_news_is_stale(monkeypatch, static_root):
+    from app.api.endpoints import health
+    from fastapi import Response
+
+    def call_readiness():
+        response = Response()
+        coroutine = health.readiness(response)
+        try:
+            coroutine.send(None)
+        except StopIteration as completed:
+            return response, completed.value
+        raise AssertionError("Readiness unexpectedly yielded")
+
+    monkeypatch.setattr(health.settings, "production_issues", lambda: [])
+    status_file = static_root / "static" / "update_status.json"
+    old = datetime.now(timezone.utc) - timedelta(hours=4)
+    status_file.write_text(json.dumps({"date": old.date().isoformat(), "last_update": old.isoformat(),
+                                       "next_update": (old + timedelta(hours=1)).isoformat(),
+                                       "interval_minutes": 60, "added": 1, "ok": True}))
+    response, body = call_readiness()
+    assert response.status_code == 503 and body["checks"]["news_fresh"] is False
+
+    now = datetime.now(timezone.utc)
+    status_file.write_text(json.dumps({"date": now.date().isoformat(), "last_update": now.isoformat(),
+                                       "next_update": (now + timedelta(hours=1)).isoformat(),
+                                       "interval_minutes": 60, "added": 0, "ok": True}))
+    response, body = call_readiness()
+    assert response.status_code == 200 and body["checks"]["news_fresh"] is True
 
 
 @pytest.mark.parametrize("limit", [0, 100_000])
