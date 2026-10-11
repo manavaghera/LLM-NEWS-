@@ -18,6 +18,7 @@ import subprocess
 import sys
 import time
 import urllib.request
+import json
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Tuple
@@ -27,6 +28,20 @@ from updates import edition_files, write_status
 ROOT = Path(__file__).resolve().parents[1]
 STATIC_DIR = ROOT / "apps" / "static"
 DEFAULT_BACKEND = os.getenv("BACKEND_URL", "http://127.0.0.1:8000")
+
+
+def alert_failure(date: str) -> None:
+    """Send a deliberately small failure event to an optional Slack/Discord-compatible webhook."""
+    target = os.getenv("ALERT_WEBHOOK_URL", "").strip()
+    if not target:
+        return
+    body = json.dumps({"text": f"NewsSense updater failed for {date}. The previous edition was preserved."}).encode()
+    try:
+        request = urllib.request.Request(target, data=body, headers={"Content-Type": "application/json"}, method="POST")
+        with urllib.request.urlopen(request, timeout=15) as response:
+            print(f"  sent failure alert (HTTP {response.status})")
+    except Exception as exc:
+        print(f"  could not send failure alert: {type(exc).__name__}")
 
 
 def warm(backend_url: str, path: str) -> None:
@@ -67,6 +82,8 @@ def run_every(minutes: int, backend_url: str, news_args: list, once: bool) -> in
         code, added, date = run_once(backend_url, False, news_args, update=True)
         status = write_status(STATIC_DIR, date, minutes, added, ok=code == 0, now=started)
         print(f"  {added} new stories; next update at {status['next_update'][11:16]}")
+        if code != 0:
+            alert_failure(date)
         if once:
             return code
         time.sleep(max(0.0, (started + timedelta(minutes=minutes) - datetime.now()).total_seconds()))

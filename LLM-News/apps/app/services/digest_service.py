@@ -7,6 +7,7 @@ from collections import defaultdict
 
 from ..core.config import settings
 from .completion_client import CompletionClient
+from .generation_cache import generation_lock, write_json
 
 logger = logging.getLogger(__name__)
 
@@ -38,16 +39,17 @@ class DigestService:
         saved to disk, so restarts don't pay for it again."""
         if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date or ""):
             raise ValueError(f"Invalid date '{date}', expected YYYY-MM-DD")
-        cached = self.cached_digest(date, max_articles)
-        if cached:
-            return cached
-        digest = self._build_daily_digest(date, max_articles)
-        if not digest.get("error") and digest.get("total_articles"):
-            path = self.cache_path(date)
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(json.dumps({"signature": self._signature(date), "max_articles": max_articles,
-                                        "digest": digest}, ensure_ascii=False), encoding="utf-8")
-        return digest
+        path = self.cache_path(date)
+        with generation_lock(path):
+            cached = self.cached_digest(date, max_articles)
+            if cached:
+                return cached
+            signature = self._signature(date)
+            digest = self._build_daily_digest(date, max_articles)
+            # An update may finish while the AI is answering. Never label old text with new files.
+            if not digest.get("error") and digest.get("total_articles") and self._signature(date) == signature:
+                write_json(path, {"signature": signature, "max_articles": max_articles, "digest": digest})
+            return digest
 
     def _get_llm_client(self):
         """Lazy-load the LLM client (first provider with an API key)."""

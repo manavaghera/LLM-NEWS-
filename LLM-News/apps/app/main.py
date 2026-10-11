@@ -1,10 +1,13 @@
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 import logging
+import time
 from pathlib import Path
 from .core.config import settings
 from .core.limits import BudgetExceeded, RateLimited
+from .core import analytics
 from .api.api import api_router
 from .api.endpoints import public
 
@@ -27,6 +30,39 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.ALLOWED_HOSTS)
+
+
+@app.middleware("http")
+async def production_guardrails(request: Request, call_next):
+    length = request.headers.get("content-length")
+    if length and length.isdigit() and int(length) > settings.MAX_REQUEST_BYTES:
+        return JSONResponse(status_code=413, content={"detail": "Request body is too large"})
+    started = time.perf_counter()
+    try:
+        response = await call_next(request)
+    except Exception:
+        elapsed = round((time.perf_counter() - started) * 1000)
+        route = getattr(request.scope.get("route"), "path", "/unmatched")
+        try:
+            analytics.record_request(route, request.method, 500, elapsed)
+        except Exception:
+            logger.exception("Could not record aggregate request metric")
+        raise
+    elapsed = round((time.perf_counter() - started) * 1000)
+    route = getattr(request.scope.get("route"), "path", "/unmatched")
+    try:
+        analytics.record_request(route, request.method, response.status_code, elapsed)
+    except Exception:
+        logger.exception("Could not record aggregate request metric")
+    if elapsed >= settings.SLOW_REQUEST_MS:
+        logger.warning("Slow request route=%s method=%s duration_ms=%d", route, request.method, elapsed)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()")
+    response.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
+    return response
 
 
 @app.exception_handler(RateLimited)

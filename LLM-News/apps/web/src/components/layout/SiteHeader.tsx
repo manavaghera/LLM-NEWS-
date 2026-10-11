@@ -1,6 +1,7 @@
 import { Moon, Sun } from 'lucide-react'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router'
 import { Button } from '@/components/ui/button'
+import { AlertsMenu } from '@/components/news/AlertsMenu'
 import { editionSearch, useEdition } from '@/hooks/useEdition'
 import { formatShortDate } from '@/lib/format'
 import { useLibrary } from '@/lib/library'
@@ -28,7 +29,7 @@ function EditionPicker() {
 
   const onChange = (next: string) => {
     // Digest follows the edition; every other page goes to that day's front page
-    navigate({ pathname: pathname === '/digest' ? '/digest' : '/', search: editionSearch(next, dates[0]) })
+    navigate({ pathname: ['/digest', '/ai-models'].includes(pathname) ? pathname : '/', search: editionSearch(next, dates[0]) })
   }
 
   return (
@@ -57,6 +58,7 @@ export function SiteHeader() {
 
   const links = [
     { to: { pathname: '/', search }, label: 'Today', end: true },
+    { to: { pathname: '/ai-models', search }, label: 'AI Models', end: false },
     { to: { pathname: '/digest', search }, label: 'Daily Digest', end: false },
     { to: { pathname: '/trends' }, label: 'Trends', end: false },
     { to: { pathname: '/search' }, label: 'Search', end: false },
@@ -88,17 +90,18 @@ export function SiteHeader() {
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
         <div className="flex h-16 items-center gap-3 sm:gap-6">
           <Link to={{ pathname: '/', search }} aria-label="NewsSense home">
-            <Logo />
+            <Logo className="[&>span:last-child]:hidden sm:[&>span:last-child]:inline" />
           </Link>
-          {nav('hidden items-center gap-4 md:flex lg:gap-6')}
+          {nav('hidden items-center gap-4 lg:flex lg:gap-6')}
           <div className="ml-auto flex items-center gap-2">
             <EditionPicker />
+            <AlertsMenu />
             <Button variant="ghost" size="icon" onClick={toggle} aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}>
               {theme === 'dark' ? <Sun /> : <Moon />}
             </Button>
           </div>
         </div>
-        {nav('-mx-4 flex gap-6 overflow-x-auto px-4 pb-2 [scrollbar-width:none] md:hidden')}
+        {nav('-mx-4 flex gap-6 overflow-x-auto px-4 pb-2 [scrollbar-width:none] lg:hidden')}
       </div>
     </header>
   )

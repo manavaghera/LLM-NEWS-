@@ -159,14 +159,46 @@ def test_rss_feed_is_valid_xml(static_root):
     assert items[0].findtext("link") == "http://news.example/article/2026-01-02/group_1"
 
 
+def test_rss_feed_can_be_filtered_by_category(static_root):
+    write_article(static_root, "2026-01-02", "group_1", "Model launch", "ai_models")
+    write_article(static_root, "2026-01-02", "group_2", "Tech story", "tech")
+    response = client.get("/feed.xml?category=ai_models")
+    root = ET.fromstring(response.content)
+    assert [item.findtext("title") for item in root.findall("./channel/item")] == ["Model launch"]
+    assert root.findtext("./channel/title") == "NewsSense · AI Models"
+
+
+def test_public_model_catalog_and_widget(static_root):
+    catalog = {
+        "updated_at": "2026-10-11", "currency": "USD", "price_unit": "per million tokens",
+        "models": [{"id": "safe-model.v2", "name": "Safe <Model>", "provider": "Example",
+                    "input_price": 1.5, "output_price": 4, "context_tokens": 128000}],
+    }
+    (static_root / "static" / "model_catalog.json").write_text(json.dumps(catalog), encoding="utf-8")
+    response = client.get("/models/catalog.json")
+    assert response.json() == catalog
+    assert response.headers["access-control-allow-origin"] == "*"
+    assert response.headers["cache-control"] == "public, max-age=3600"
+    html = client.get("/widgets/models?ids=safe-model.v2").text
+    assert "Safe &lt;Model&gt;" in html and "$1.5" in html and "128,000" in html
+    assert "Safe <Model>" not in html
+    share = client.get("/models/safe-model.v2/share", headers={"host": "news.example"})
+    assert share.status_code == 200
+    assert "Safe &lt;Model&gt; price, context and details" in share.text
+    assert 'property="og:image" content="http://news.example/social-preview.svg"' in share.text
+    assert 'rel="canonical" href="http://news.example/ai-models/safe-model.v2"' in share.text
+
+
 def test_update_status_for_the_countdown(static_root):
     assert client.get("/api/news/status").json()["next_update"] is None  # no updater has run
     status = static_root / "static" / "update_status.json"
     status.write_text(json.dumps({"date": "2026-10-04", "last_update": "2026-10-04T14:05:00+05:30",
                                   "next_update": "2026-10-04T15:05:00+05:30", "interval_minutes": 60, "added": 2}))
-    assert client.get("/api/news/status").json() == {
+    saved = client.get("/api/news/status").json()
+    assert {key: saved[key] for key in ("date", "last_update", "next_update", "interval_minutes", "added")} == {
         "date": "2026-10-04", "last_update": "2026-10-04T14:05:00+05:30",
         "next_update": "2026-10-04T15:05:00+05:30", "interval_minutes": 60, "added": 2}
+    assert saved["stale"] is True and saved["minutes_since_update"] > 0
     status.write_text(json.dumps({"last_update": "2026-10-04T14:05:00", "next_update": "soon", "interval_minutes": 60}))
     assert client.get("/api/news/status").json()["last_update"] is None  # broken file: no countdown
 

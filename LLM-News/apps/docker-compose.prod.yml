@@ -4,8 +4,11 @@
 services:
   backend:
     environment:
+      - APP_ENV=production
       - PROXY_COUNT=2  # visitors reach the backend through Caddy, then nginx
       - PUBLIC_BASE_URL=https://${DOMAIN:?Set DOMAIN in ../.env}
+      - ALLOWED_ORIGINS=https://${DOMAIN:?Set DOMAIN in ../.env}
+      - ALLOWED_HOSTS=${DOMAIN:?Set DOMAIN in ../.env},backend,localhost
 
   frontend:
     ports: !reset []  # only reachable through Caddy

@@ -1,5 +1,6 @@
 """Unit tests for pipeline/quick_news.py (no network or LLM calls). Run from LLM-News: python -m pytest tests"""
 import sys
+import asyncio
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "pipeline"))
@@ -11,6 +12,31 @@ import quick_news as q  # noqa: E402
 def item(title, summary="", publisher="BBCNews", region="uk", image="", n=0):
     return {"publisher": publisher, "region": region, "title": title, "summary": summary,
             "link": f"https://example.com/{publisher}/{n}", "image": image, "published": "2026-09-30"}
+
+
+def test_expanded_categories_have_multiple_distinct_sources():
+    added = {"startups", "health", "climate", "space", "sports", "gaming"}
+    assert added <= q.FEEDS.keys()
+    for category in added:
+        urls = [feed[2] for feed in q.FEEDS[category]]
+        assert len(urls) >= 3
+        assert len(urls) == len(set(urls))
+        assert all(url.startswith("https://") for url in urls)
+
+
+def test_ai_models_desk_has_specialist_sources_and_rumour_rules():
+    publishers = {publisher for publisher, _, _ in q.FEEDS["ai_models"]}
+    assert {"OpenAI", "GoogleAI", "HuggingFace"} <= publishers
+    guidance = q.category_guidance("ai_models")
+    assert "'Report:'" in guidance and "Never turn a report into a confirmed launch" in guidance
+    assert q.category_guidance("science") == ""
+
+
+def test_ai_model_leak_headlines_are_always_marked_as_reports():
+    leak = item("Leak suggests a new model may launch soon", n=1)
+    draft = {"headline": "New model launch may be near", "body": [{"section": "Claim", "content": "A report described it.", "item_ids": [1]}]}
+    article = q.build_article(draft, [leak], {1}, "ai_models", "2026-10-10")
+    assert article["headline"].startswith("Report:")
 
 
 def test_group_items_joins_same_event_only():
@@ -73,6 +99,23 @@ def test_best_image_skips_tracking_pixels_and_upsizes_bbc():
     assert media.best_image(guardian) == "https://i.guim.co.uk/large"
 
 
+def test_audio_timeout_removes_partial_file(tmp_path, monkeypatch):
+    output = tmp_path / "story.mp3"
+    output.write_bytes(b"partial")
+
+    class SlowVoice:
+        def __init__(self, *args):
+            pass
+
+        async def save(self, path):
+            await asyncio.sleep(10)
+
+    monkeypatch.setattr(media.edge_tts, "Communicate", SlowVoice)
+    monkeypatch.setattr(media, "AUDIO_TIMEOUT_SECONDS", 0.001)
+    assert media.make_audio("A spoken summary", output) is False
+    assert not output.exists()
+
+
 def test_download_image_rejects_non_web_urls(tmp_path):
     assert media.download_image("file:///etc/passwd", tmp_path, "group_1") == ""
     assert list(tmp_path.iterdir()) == []
@@ -106,7 +149,9 @@ def test_make_thumbnail_is_a_small_webp(tmp_path):
 
 
 def test_articles_without_a_finished_fact_check_are_held_back():
-    checked = {"claim_check": {"checked": True, "removed": []}, "body": [{"content": "Supported."}]}
+    checked = {"headline": "Supported", "claim_check": {"checked": True, "removed": []}, "body": [{"content": "Supported."}]}
     assert q.held_back(checked) == ""
     assert q.held_back({"body": [{"content": "Never checked."}]}).startswith("held back")  # the check call failed
     assert q.held_back({**checked, "body": []}).startswith("dropped")                     # nothing was supported
+    assert q.held_back({**checked, "headline": ""}).startswith("held back")
+    assert q.held_back({**checked, "claim_check": {"checked": False}}).startswith("held back")

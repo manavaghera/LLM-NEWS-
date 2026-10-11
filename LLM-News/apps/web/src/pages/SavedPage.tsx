@@ -1,13 +1,16 @@
 import { Bookmark, X } from 'lucide-react'
 import { Link } from 'react-router'
 import { FollowButton, SaveButton } from '@/components/news/LibraryButtons'
+import { LibraryTransfer } from '@/components/news/LibraryTransfer'
 import { ArticleImage, Kicker } from '@/components/news/parts'
 import { EmptyState } from '@/components/ui/feedback'
 import { categoryInfo, formatLongDate } from '@/lib/format'
-import { library, useLibrary } from '@/lib/library'
+import { library, MAX_FOLLOWED_STORIES, useLibrary } from '@/lib/library'
+import { useAlerts } from '@/lib/alerts'
 
 function Following() {
   const lib = useLibrary()
+  const alertState = useAlerts()
   const topics = [
     ...lib.categories.map((c) => ({ key: `c:${c}`, label: categoryInfo(c).label, remove: () => library.toggleCategory(c) })),
     ...lib.keywords.map((k) => ({ key: `k:${k}`, label: `“${k}”`, remove: () => library.toggleKeyword(k) })),
@@ -36,6 +39,19 @@ function Following() {
         Categories:
         {['social', 'tech', 'entertainment'].map((c) => <FollowButton key={c} kind="category" value={c} label={categoryInfo(c).label} />)}
       </div>
+      <div className="mt-5 border-t border-rule pt-4">
+        <h3 className="text-sm font-semibold">Stories you follow ({lib.stories.length}/{MAX_FOLLOWED_STORIES})</h3>
+        <p className="mt-1 text-xs text-muted">Later coverage and changes are checked every two minutes while this site is open. Use “Follow this story” on an article to add it here.</p>
+        {lib.stories.length > 0 && <ul className="mt-3 divide-y divide-rule">
+          {lib.stories.map((story) => <li key={`${story.date}/${story.group_id}`} className="flex items-start gap-3 py-3 text-sm">
+            <div className="min-w-0 flex-1"><Link to={`/article/${story.date}/${story.group_id}`} className="break-words hover:text-accent hover:underline">{story.headline}</Link>
+              <p className="text-xs text-faint">{formatLongDate(story.date)}</p>
+              {alertState.unavailable?.includes(`${story.date}/${story.group_id}`) && <p className="mt-1 text-xs text-negative">The original story is unavailable or this location was replaced. Its alerts are paused.</p>}
+            </div>
+            <button type="button" onClick={() => library.toggleStory(story)} aria-label={`Stop following story: ${story.headline}`} className="rounded-full p-1 text-muted hover:bg-sunken hover:text-negative"><X className="size-4" /></button>
+          </li>)}
+        </ul>}
+      </div>
     </section>
   )
 }
@@ -49,6 +65,7 @@ export function SavedPage() {
       <title>Saved · NewsSense</title>
       <h1 className="headline text-4xl font-semibold tracking-tight">Saved stories</h1>
       <Following />
+      <LibraryTransfer />
       {!lib.saved.length ? (
         <EmptyState icon={<Bookmark />} title="Nothing saved yet">
           Use the bookmark on any story to keep it here. Saved stories stay in this browser.

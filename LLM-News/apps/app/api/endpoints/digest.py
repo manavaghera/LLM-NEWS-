@@ -60,9 +60,10 @@ async def get_daily_briefing_audio(date: str):
     digest = await run_in_threadpool(daily_digest, date)
     if digest.get("error") or not digest.get("total_articles"):
         raise HTTPException(status_code=404, detail="No briefing is available for this date")
-    path = audio_cache("briefings", f"{date}.mp3")
+    script = briefing_script(digest)
+    path = audio_cache("briefings", f"{date}.mp3", text=script)
     try:
-        await speak(briefing_script(digest), path)
+        await speak(script, path)
     except Exception as e:
         logger.error(f"Briefing audio failed: {e}")
         raise HTTPException(status_code=502, detail="The voice service had a problem. Please try again.")

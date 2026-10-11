@@ -2,6 +2,7 @@ import { Search, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { useSearch } from '@/api/queries'
+import { api } from '@/api/client'
 import type { NewsItem } from '@/api/types'
 import { FollowButton } from '@/components/news/LibraryButtons'
 import { StoryCard, StorySkeleton } from '@/components/news/StoryCard'
@@ -28,6 +29,11 @@ export function SearchPage() {
     }, 350)
     return () => clearTimeout(timer)
   }, [draft, query, setParams])
+  useEffect(() => {
+    if (query.length < 2) return
+    const timer = setTimeout(() => { void api.analytics('search').catch(() => undefined) }, 800)
+    return () => clearTimeout(timer)
+  }, [query])
 
   return (
     <div>

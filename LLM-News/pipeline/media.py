@@ -15,6 +15,7 @@ IMAGE_TYPES = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "i
 MIN_IMAGE_BYTES = 2 * 1024  # anything smaller is a spacer/tracking image
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
 THUMB_WIDTH = 800  # cards are about 400px wide; 2x for sharp screens
+AUDIO_TIMEOUT_SECONDS = 90
 IMG_TAG = re.compile(r"<img[^>]+src=[\"']([^\"']+)", re.IGNORECASE)
 
 
@@ -79,7 +80,10 @@ def make_audio(text: str, path: Path) -> bool:
     """Read text aloud to an mp3 with edge-tts."""
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        asyncio.run(edge_tts.Communicate(text, VOICE).save(str(path)))
+        asyncio.run(asyncio.wait_for(
+            edge_tts.Communicate(text, VOICE).save(str(path)),
+            timeout=AUDIO_TIMEOUT_SECONDS,
+        ))
         return True
     except Exception as e:
         path.unlink(missing_ok=True)  # don't leave a partial mp3 the website would try to play

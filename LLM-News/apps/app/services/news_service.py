@@ -5,6 +5,7 @@ import zlib
 from pathlib import Path
 from typing import Dict, List, Optional, Union
 from ..core.config import settings
+from .story_identity import story_identity
 
 # Add fuzzywuzzy import
 try:
@@ -125,6 +126,7 @@ class NewsService:
         return {
             "id": zlib.crc32(f"{date}/{group_id}".encode()),  # stable across restarts, unlike hash()
             "group_id": group_id,
+            "story_identity": story_identity(article),
             "headline": article.get("headline", ""),
             "subheadline": article.get("subheadline", ""),
             "category": article.get("category", "general"),
@@ -454,7 +456,7 @@ class NewsService:
                                         PUBLISHER ANALYSIS:
                                         - Unique Publishers: {len(unique_publishers)}
                                         - Countries Represented: {', '.join(unique_countries)}
-                                        - Average Credibility Score: {avg_credibility:.2f if avg_credibility > 0 else 'N/A'}
+                                        - Average Credibility Score: {f'{avg_credibility:.2f}' if avg_credibility > 0 else 'N/A'}
                                         - Main Publishers: {', '.join(unique_publishers[:5])}
                                         """)
             
@@ -487,4 +489,4 @@ class NewsService:
                 return news_summary
         except Exception as e:
             logger.error(f"Error loading news data: {e}")
-            return "Recent news data is currently unavailable." 
+            return "Recent news data is currently unavailable."

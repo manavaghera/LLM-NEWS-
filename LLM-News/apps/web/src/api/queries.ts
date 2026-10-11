@@ -10,6 +10,9 @@ export const useDates = () => useQuery({ queryKey: ['dates'], queryFn: api.dates
 export const useNews = (date: string | undefined) =>
   useQuery({ queryKey: ['news', date], queryFn: () => api.news(date!), enabled: !!date })
 
+export const useModelCatalog = () =>
+  useQuery({ queryKey: ['model-catalog'], queryFn: api.modelCatalog, staleTime: HOUR })
+
 export const useSearch = (query: string) =>
   useQuery({ queryKey: ['search', query], queryFn: () => api.search(query), enabled: query.trim().length >= 2 })
 

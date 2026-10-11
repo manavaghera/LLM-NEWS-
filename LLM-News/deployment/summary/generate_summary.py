@@ -9,7 +9,7 @@ import sys
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append(project_root)
 
-from llm_client import openai_client, perplexity_client, alibaba_client, gemini_client
+from llm_client import LLMClient, LLM_PUBLISHER, LLM_MODEL, default_client, providers
 
 def read_articles_from_directory(date):
     """Read all article JSON files from the specified date directory"""
@@ -20,7 +20,8 @@ def read_articles_from_directory(date):
         return []
     
     articles = []
-    article_files = [f for f in os.listdir(input_path) if f.endswith('.json')]
+    article_files = [f for f in os.listdir(input_path)
+                     if f.startswith('group_') and f.endswith('.json') and f != 'group_categories.json']
     
     print(f"Found {len(article_files)} article files in {input_path}")
     
@@ -93,78 +94,53 @@ def save_summary(summary_text, date):
     # Ensure the directory exists
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     
-    try:
-        with open(output_path, 'w', encoding='utf-8') as f:
-            f.write(summary_text)
-        print(f"Summary saved to {output_path}")
-        return True
-    except Exception as e:
-        print(f"Error saving summary: {e}")
-        return False
+    with open(output_path, 'w', encoding='utf-8') as f:
+        f.write(summary_text)
+    print(f"Summary saved to {output_path}")
+    return True
 
-def generate_llm_summary(prompt, llm_provider='ALIBABA'):
-    """Generate summary using LLM client"""
+def generate_llm_summary(prompt, llm_provider=None, model=None):
+    """Use the shared provider settings and fail before publishing an invalid summary."""
+    provider = (llm_provider or LLM_PUBLISHER).upper()
+    if provider not in providers.PROVIDERS:
+        raise ValueError(f"Unsupported publisher: {provider}")
+    model = model or (LLM_MODEL if provider == LLM_PUBLISHER else providers.model_for(provider))
+    client = default_client if provider == LLM_PUBLISHER else LLMClient(publisher=provider)
+    print(f"Generating summary using {provider} with model: {model}")
+
+    system_prompt = "You are an AI news reporter. Generate a comprehensive, engaging summary of the provided news articles in a broadcast-style format. Focus on the most important stories and maintain a professional yet accessible tone."
+    response = client.generate(
+        prompt_content=prompt,
+        system_content=system_prompt,
+        temperature=0.3,
+        model=model
+    )
     try:
-        # Select the appropriate LLM client
-        if llm_provider.upper() == 'GEMINI':
-            client = openai_client
-            model = 'gemini-2.5-pro'
-        elif llm_provider.upper() == 'ALIBABA':
-            client = alibaba_client
-            model = 'qwen-max'
-        elif llm_provider.upper() == 'PERPLEXITY':
-            client = perplexity_client
-            model = 'llama-3.1-8b-instant' # change model here !
-        else:
-            print(f"Unknown LLM provider: {llm_provider}. Using OpenAI as default.")
-            client = openai_client
-            model = 'gpt-4o-mini'
-        
-        print(f"Generating summary using {llm_provider} with model: {model}")
-        
-        # Generate the summary
-        system_prompt = "You are an AI news reporter. Generate a comprehensive, engaging summary of the provided news articles in a broadcast-style format. Focus on the most important stories and maintain a professional yet accessible tone."
-        
-        response = client.generate(
-            prompt_content=prompt,
-            system_content=system_prompt,
-            temperature=0.3,
-            model=model
-        )
-        
-        # Extract the content from the response
-        if hasattr(response, 'choices') and len(response.choices) > 0:
-            summary = response.choices[0].message.content
-        else:
-            # Fallback for different response formats
-            summary = str(response)
-        
-        return summary
-        
-    except Exception as e:
-        print(f"Error generating LLM summary: {e}")
-        # Return a fallback summary
-        return f""" error ! """
+        summary = response.choices[0].message.content
+    except (AttributeError, IndexError, TypeError) as exc:
+        raise ValueError("The model returned no summary text.") from exc
+    if not isinstance(summary, str) or not summary.strip():
+        raise ValueError("The model returned no summary text.")
+    return summary.strip()
 
 def main():
     parser = argparse.ArgumentParser(description='Generate summary from articles')
     parser.add_argument('--date', type=str, required=True, help='Date in YYYY-MM-DD format')
-    parser.add_argument('--llm-provider', type=str, default='ALIBABA', 
-                       choices=['OPENAI', 'PERPLEXITY', 'ALIBABA', 'GEMINI'],
-                       help='LLM provider to use for summary generation (default: ALIBABA)')
+    parser.add_argument('--llm-provider', type=str.upper, choices=list(providers.PROVIDERS),
+                       help='Override LLM_PUBLISHER for summary generation')
+    parser.add_argument('--model', help='Override the configured model for summary generation')
     
     args = parser.parse_args()
     date = args.date
     llm_provider = args.llm_provider
     
-    print(f"Generating summary for date: {date} using {llm_provider}")
+    print(f"Generating summary for date: {date} using {llm_provider or LLM_PUBLISHER}")
     
     # Read all articles
     articles = read_articles_from_directory(date)
     
     if not articles:
-        print("No articles found. Exiting.")
-        return
+        raise SystemExit("No articles found. Exiting.")
     
     print(f"Successfully loaded {len(articles)} articles")
     
@@ -181,9 +157,7 @@ def main():
     print(f"Prompt length: {len(prompt)} characters")
     
     # Generate the actual summary using the LLM
-    if not llm_provider:
-        llm_provider = 'ALIBABA'
-    llm_summary = generate_llm_summary(prompt, llm_provider)
+    llm_summary = generate_llm_summary(prompt, llm_provider, args.model)
     
     # Save the summary
     save_summary(llm_summary, date)

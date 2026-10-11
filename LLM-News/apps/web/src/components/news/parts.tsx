@@ -21,22 +21,29 @@ export function NewBadge() {
   )
 }
 
-/** Article image; falls back to a category-tinted placeholder when missing or broken. */
-export function ArticleImage({
-  src,
-  alt,
-  category,
-  show = true,
-  className,
-  priority = false,
-}: {
+type ArticleImageProps = {
   src: string
   alt: string
   category: string
   show?: boolean
   className?: string
   priority?: boolean
-}) {
+}
+
+/** Each source starts with fresh error state, including cached article navigation. */
+export function ArticleImage(props: ArticleImageProps) {
+  return <ImageSource key={props.src} {...props} />
+}
+
+/** Article image; falls back to a category-tinted placeholder when missing or broken. */
+function ImageSource({
+  src,
+  alt,
+  category,
+  show = true,
+  className,
+  priority = false,
+}: ArticleImageProps) {
   const [failed, setFailed] = useState(false)
   const info = categoryInfo(category)
 

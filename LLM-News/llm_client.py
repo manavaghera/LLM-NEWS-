@@ -1,11 +1,22 @@
 import importlib.util
+import logging
 import os
 from pathlib import Path
 from openai import OpenAI
 from typing import Optional
 from dotenv import load_dotenv
+from apps.app.core.generation import finish_call, start_call
 
 load_dotenv()
+logger = logging.getLogger(__name__)
+
+
+def _record_result(call_id, response=None, failed=False):
+    try:
+        finish_call(call_id, response, failed)
+    except Exception:
+        # The reservation still counts against the cap; telemetry must not discard paid output.
+        logger.warning("Could not finish AI usage record %s", call_id)
 
 # One provider table (keys, URLs, models) shared with the backend: apps/app/core/providers.py
 _spec = importlib.util.spec_from_file_location(
@@ -28,6 +39,7 @@ class LLMClient:
         self.client = OpenAI(
             api_key=self.api_key,
             base_url=self.base_url,
+            max_retries=0,  # every billable attempt is reserved against the pipeline allowance
             timeout=300  # Default 3 minutes timeout for all requests
         )
 
@@ -40,6 +52,7 @@ class LLMClient:
         model: str = 'gpt-4o-mini',  
         **kwargs
     ) -> str:
+        call_id = start_call(self.publisher, model)
         try:
             completion = self.client.chat.completions.create(
                 model=model,
@@ -51,9 +64,11 @@ class LLMClient:
                 top_p=top_p,
                 **kwargs
             )
-            return completion
         except Exception as e:
+            _record_result(call_id, failed=True)
             raise RuntimeError(f"Error generating response from {self.publisher}: {str(e)}")
+        _record_result(call_id, completion)
+        return completion
 
 class _LazyClient:
     """Builds the LLMClient on first use, so a missing key only fails the step that needs it."""

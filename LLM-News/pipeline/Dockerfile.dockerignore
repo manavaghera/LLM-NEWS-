@@ -3,4 +3,5 @@
 !llm_client.py
 !requirements/quick_news.txt
 !apps/app/core/providers.py
+!apps/app/core/generation.py
 !pipeline/*.py

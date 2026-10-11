@@ -10,6 +10,7 @@ RSS feeds + one AI key; no Reddit keys, datasets or classifiers needed.
 pip install -r requirements/quick_news.txt
 python pipeline/quick_news.py                       # today's news into apps/static/
 python pipeline/quick_news.py --append --categories social   # add one category to today
+python pipeline/quick_news.py --categories ai_models,tech,startups  # choose desks to control cost
 python pipeline/thumbnails.py                       # card thumbnails for older images
 python pipeline/daily_update.py --every 07:00       # refresh every morning (+ digest and briefing)
 python pipeline/daily_update.py --interval 60       # or: new stories every hour, with a countdown on the site

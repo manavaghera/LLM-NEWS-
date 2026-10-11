@@ -3,6 +3,9 @@ import json
 import sys
 from pathlib import Path
 from types import SimpleNamespace
+from copy import deepcopy
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "pipeline"))
 
@@ -44,14 +47,13 @@ def test_claim_check_removes_only_unsupported_sentences():
         "timeline": {"2026-09-30": "Mandate extended", "2026-01-01": "Invented event"},
     }
     fake = FakeLLM({"unsupported": [{"id": "L.2", "reason": "no cost given"}, {"id": "S1.2", "reason": "no vote count"},
-                                    {"id": "S2.1", "reason": "no memo"}, {"id": "T2", "reason": "not in items"},
-                                    {"id": "Z9", "reason": "unknown id is ignored"}]})
+                                    {"id": "S2.1", "reason": "no memo"}, {"id": "T2", "reason": "not in items"}]})
     record = claim_check(article, ITEMS, fake, "m")
     assert article["lead"] == "The UN extended the force."
     assert article["body"] == [{"section": "A", "content": "The mandate runs six months.<a href='https://cbc.ca/1'>[1]</a>",
                                 "sources": ["https://cbc.ca/1"]}]  # section B had nothing left
     assert article["timeline"] == {"2026-09-30": "Mandate extended"}
-    assert record["checked"] and record["statements"] == 7 and len(record["removed"]) == 4
+    assert record["checked"] and record["statements"] == 9 and len(record["removed"]) == 4
     assert "S1.2: The vote was 15-0." in fake.prompts[0]
     assert "[1] CBCNews, published 2026-09-30: UN extends Haiti force" in fake.prompts[0]  # timeline dates are checkable
 
@@ -82,6 +84,69 @@ def test_checks_retry_once_on_broken_json():
     article = {"lead": "The UN extended the force.", "body": [{"section": "A", "content": "Six months.", "sources": []}]}
     assert claim_check(article, ITEMS, Flaky(), "m")["removed"] == []
     assert Flaky.calls == 2
+
+
+@pytest.mark.parametrize("reply", [{}, {"unsupported": None}, {"unsupported": {}},
+    {"unsupported": ["S1.1"]}, {"unsupported": [{"id": "S1.1"}]},
+    {"unsupported": [{"id": "unknown", "reason": "bad"}]},
+    {"unsupported": [{"id": [], "reason": "bad"}]}, {"unsupported": [], "evidence": {}}])
+def test_malformed_verdict_is_retried_then_rejected_without_changing_article(reply):
+    article = {"headline": "A vote", "body": [{"section": "Vote", "content": "The mandate runs six months."}]}
+    before = deepcopy(article)
+    fake = FakeLLM(reply)
+    with pytest.raises(ValueError):
+        claim_check(article, ITEMS, fake, "m")
+    assert len(fake.prompts) == 2
+    assert article == before
+
+
+def test_checks_and_removes_unsupported_titles_and_spoken_summary():
+    article = {"headline": "Secret billion-dollar deal", "subheadline": "Officials spent billions.",
+        "summary_speech": "The mandate runs six months. It cost billions.",
+        "body": [{"section": "A billion-dollar deal", "content": "The mandate runs six months."}]}
+    fake = FakeLLM({"unsupported": [{"id": sid, "reason": "No cost in source"}
+                                    for sid in ("H.1", "D.1", "A.2", "SH1.1")]})
+    record = claim_check(article, ITEMS, fake, "m")
+    assert article["headline"] == article["subheadline"] == article["body"][0]["section"] == ""
+    assert article["summary_speech"] == "The mandate runs six months."
+    assert len(record["removed"]) == 4
+    assert "H.1: Secret billion-dollar deal" in fake.prompts[0]
+    assert "A.2: It cost billions." in fake.prompts[0]
+
+
+def test_evidence_only_keeps_literal_excerpts_from_real_sources():
+    article = {"lead": "The mandate runs six months.", "body": [{"content": "The mandate runs six months."}]}
+    fake = FakeLLM({"unsupported": [], "evidence": [
+        {"id": "L.1", "sources": [{"item_id": 1, "quote": "The mandate runs six months."},
+                                    {"item_id": 1, "quote": "A fabricated quote"},
+                                    {"item_id": 100, "quote": "The mandate runs six months."}]},
+        {"id": "S1.1", "sources": [{"item_id": 1, "quote": "It will last half a year."}]},
+        {"id": "unknown", "sources": [{"item_id": 1, "quote": "The mandate runs six months."}]},
+    ]})
+    record = claim_check(article, ITEMS, fake, "m")
+    assert record["evidence"] == [{"id": "L.1", "text": "The mandate runs six months.", "field": "lead",
+        "sources": [{"url": ITEMS[0]["link"], "publisher": "CBCNews", "quote": "The mandate runs six months."}]}]
+
+
+def test_evidence_tracks_section_positions_after_removal():
+    article = {"body": [{"content": "An invented event."}, {"content": "The mandate runs six months."}]}
+    fake = FakeLLM({"unsupported": [{"id": "S1.1", "reason": "Invented"}], "evidence": [
+        {"id": "S1.1", "sources": [{"item_id": 1, "quote": "The mandate runs six months."}]},
+        {"id": "S2.1", "sources": [{"item_id": 1, "quote": "The mandate runs six months."}]},
+    ]})
+    record = claim_check(article, ITEMS, fake, "m")
+    assert len(record["evidence"]) == 1
+    assert record["evidence"][0]["section_index"] == 0
+
+
+def test_timeline_evidence_can_quote_source_publication_date():
+    article = {"body": [], "timeline": {"2026-09-30": "Mandate extended"}}
+    fake = FakeLLM({"unsupported": [], "evidence": [
+        {"id": "T1", "sources": [{"item_id": 1, "quote": "2026-09-30"}]},
+    ]})
+    record = claim_check(article, ITEMS, fake, "m")
+    assert record["evidence"][0]["field"] == "timeline"
+    assert record["evidence"][0]["sources"][0]["quote"] == "2026-09-30"
 
 
 def test_reliability_uses_trust_data_when_present(tmp_path):

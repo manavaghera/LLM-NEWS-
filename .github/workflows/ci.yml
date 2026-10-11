@@ -9,6 +9,38 @@ permissions:
   contents: read
 
 jobs:
+  dependency-security:
+    name: Dependency security scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - run: pip install pip-audit
+      - run: pip-audit -r LLM-News/apps/requirements.txt
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: LLM-News/apps/web/package-lock.json
+      - run: npm ci
+        working-directory: LLM-News/apps/web
+      - run: npm audit --audit-level=high
+        working-directory: LLM-News/apps/web
+
+  deployment-config:
+    name: Validate deployment configuration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: cp LLM-News/.env.example LLM-News/.env
+      - run: sed -i 's/^DOMAIN=$/DOMAIN=news.example.com/; s/^STAGING_DOMAIN=$/STAGING_DOMAIN=staging.news.example.com/' LLM-News/.env
+      - run: docker compose --env-file ../.env -f docker-compose.yml -f docker-compose.prod.yml config --quiet
+        working-directory: LLM-News/apps
+      - run: docker compose -p newssense-staging --env-file ../.env -f docker-compose.yml -f docker-compose.staging.yml config --quiet
+        working-directory: LLM-News/apps
+
   backend:
     name: Backend API tests
     runs-on: ubuntu-latest

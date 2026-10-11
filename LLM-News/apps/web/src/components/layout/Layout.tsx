@@ -2,6 +2,7 @@ import { Outlet, ScrollRestoration } from 'react-router'
 import { ChatLauncher, ChatPanel } from '@/components/chat/ChatPanel'
 import { SiteFooter } from './SiteFooter'
 import { SiteHeader } from './SiteHeader'
+import { FirstVisitGuide, PageAnalytics, StaleNewsBanner } from './LaunchExperience'
 
 export function Layout() {
   return (
@@ -10,12 +11,15 @@ export function Layout() {
         Skip to content
       </a>
       <SiteHeader />
-      <main id="main" className="mx-auto w-full max-w-6xl flex-1 px-4 pt-8 sm:px-6">
+      <StaleNewsBanner />
+      <main id="main" tabIndex={-1} className="mx-auto w-full max-w-6xl flex-1 px-4 pt-8 outline-none sm:px-6">
         <Outlet />
       </main>
       <SiteFooter />
       <ChatLauncher />
       <ChatPanel />
+      <FirstVisitGuide />
+      <PageAnalytics />
       {/* Pages loaded directly all get the key "default", so key those by path: otherwise opening an
           article link restores the scroll position of whatever page was loaded before it */}
       <ScrollRestoration getKey={(location) => (location.key === 'default' ? location.pathname + location.search : location.key)} />

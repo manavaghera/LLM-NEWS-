@@ -2,6 +2,7 @@ import { Bookmark, BookmarkCheck, Check, Plus } from 'lucide-react'
 import { library, useLibrary } from '@/lib/library'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { api } from '@/api/client'
 
 interface SaveTarget {
   date: string
@@ -16,11 +17,13 @@ export function SaveButton({ article, variant = 'button' }: { article: SaveTarge
   const lib = useLibrary()
   const saved = library.isSaved(lib, article.date, article.group_id)
   const label = saved ? 'Remove from saved' : 'Save for later'
-  const toggle = () =>
+  const toggle = () => {
+    if (!saved) void api.analytics('article_saved').catch(() => undefined)
     library.toggleSaved({
       date: article.date, group_id: article.group_id, headline: article.headline,
       category: article.category, image_url: article.image_url,
     })
+  }
 
   if (variant === 'overlay') {
     return (
@@ -51,7 +54,10 @@ export function FollowButton({ kind, value, label }: { kind: 'category' | 'keywo
   const lib = useLibrary()
   const key = value.trim().toLowerCase()
   const following = (kind === 'category' ? lib.categories : lib.keywords).includes(key)
-  const toggle = () => (kind === 'category' ? library.toggleCategory(value) : library.toggleKeyword(value))
+  const toggle = () => {
+    if (!following) void api.analytics('topic_followed').catch(() => undefined)
+    return kind === 'category' ? library.toggleCategory(value) : library.toggleKeyword(value)
+  }
   return (
     <button
       type="button"

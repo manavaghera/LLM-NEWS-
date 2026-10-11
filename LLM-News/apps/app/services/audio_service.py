@@ -1,5 +1,6 @@
 """Spoken audio with edge-tts (Microsoft's free neural voices; no API key). Files are saved and reused."""
 import uuid
+from hashlib import sha256
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List
@@ -25,8 +26,12 @@ VOICES = {
 MAX_CHARS = 6000  # keeps a request from generating a very long recording
 
 
-def audio_cache(*parts: str) -> Path:
-    return settings.CACHE_DIR.joinpath("audio", *parts)
+def audio_cache(*parts: str, text: str, lang: str = "en") -> Path:
+    """A recording belongs to its spoken script, language and voice, not just its edition."""
+    path = settings.CACHE_DIR.joinpath("audio", *parts)
+    voice = VOICES.get(lang, VOICES["en"])
+    version = sha256(f"{lang}\0{voice}\0{text[:MAX_CHARS]}".encode("utf-8")).hexdigest()[:20]
+    return path.with_name(f"{path.stem}.{version}{path.suffix}")
 
 
 async def speak(text: str, path: Path, lang: str = "en") -> Path:

@@ -18,12 +18,34 @@
   --social: #c2410c;
   --tech: #1d4ed8;
   --entertainment: #047857;
+  --ai-models: #7c3aed;
+  --science: #0369a1;
+  --business: #a16207;
+  --startups: #0f766e;
+  --cybersecurity: #be123c;
+  --health: #be185d;
+  --climate: #15803d;
+  --space: #4338ca;
+  --sports: #b45309;
+  --gaming: #6d28d9;
   --positive: #15803d;
   --negative: #b91c1c;
+  --model-glow: #f0eaff;
+  --model-grid: rgba(124, 58, 237, 0.08);
   /* Chart series: validated all-pairs for colour-vision deficiency (dataviz validator) */
   --series-social: #eb6834;
   --series-tech: #2a78d6;
   --series-entertainment: #1baf7a;
+  --series-ai_models: #8b5cf6;
+  --series-science: #0891b2;
+  --series-business: #d97706;
+  --series-startups: #0d9488;
+  --series-cybersecurity: #e11d48;
+  --series-health: #db2777;
+  --series-climate: #16a34a;
+  --series-space: #4f46e5;
+  --series-sports: #ea580c;
+  --series-gaming: #7c3aed;
   --series-magnitude: #4a3aa7;
   --series-positive: #2a78d6;
   --series-negative: #e34948;
@@ -44,11 +66,33 @@
   --social: #fb923c;
   --tech: #6ea8fe;
   --entertainment: #34d399;
+  --ai-models: #a78bfa;
+  --science: #67e8f9;
+  --business: #fbbf24;
+  --startups: #5eead4;
+  --cybersecurity: #fb7185;
+  --health: #f9a8d4;
+  --climate: #86efac;
+  --space: #a5b4fc;
+  --sports: #fdba74;
+  --gaming: #c4b5fd;
   --positive: #4ade80;
   --negative: #f87171;
+  --model-glow: #241b38;
+  --model-grid: rgba(167, 139, 250, 0.08);
   --series-social: #d95926;
   --series-tech: #3987e5;
   --series-entertainment: #199e70;
+  --series-ai_models: #9f7aea;
+  --series-science: #22b8cf;
+  --series-business: #e5a50a;
+  --series-startups: #2dd4bf;
+  --series-cybersecurity: #ef5675;
+  --series-health: #ec4899;
+  --series-climate: #22c55e;
+  --series-space: #818cf8;
+  --series-sports: #f97316;
+  --series-gaming: #a78bfa;
   --series-magnitude: #9085e9;
   --series-positive: #3987e5;
   --series-negative: #e66767;
@@ -69,6 +113,16 @@
   --color-social: var(--social);
   --color-tech: var(--tech);
   --color-entertainment: var(--entertainment);
+  --color-ai-models: var(--ai-models);
+  --color-science: var(--science);
+  --color-business: var(--business);
+  --color-startups: var(--startups);
+  --color-cybersecurity: var(--cybersecurity);
+  --color-health: var(--health);
+  --color-climate: var(--climate);
+  --color-space: var(--space);
+  --color-sports: var(--sports);
+  --color-gaming: var(--gaming);
   --color-positive: var(--positive);
   --color-negative: var(--negative);
   --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
@@ -110,9 +164,57 @@
   animation: shimmer 1.6s linear infinite;
 }
 
+.model-hero-grid {
+  background-image:
+    radial-gradient(circle at 82% 10%, var(--model-glow) 0, transparent 36%),
+    linear-gradient(var(--model-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--model-grid) 1px, transparent 1px);
+  background-size: auto, 34px 34px, 34px 34px;
+}
+
+.model-studio-card,
+.model-workbench > article {
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--ink) 4%, transparent);
+  transition: border-color 220ms ease, box-shadow 220ms ease, transform 220ms ease;
+}
+
+.model-studio-card:hover,
+.model-workbench > article:hover {
+  border-color: color-mix(in srgb, var(--ai-models) 38%, var(--rule));
+  box-shadow: 0 18px 50px color-mix(in srgb, var(--ai-models) 9%, transparent);
+  transform: translateY(-2px);
+}
+
+.reveal-section {
+  opacity: 0;
+  filter: blur(5px);
+  transform: translateY(28px) scale(0.992);
+  transition:
+    opacity 700ms cubic-bezier(.2,.75,.25,1) var(--reveal-delay, 0ms),
+    filter 700ms cubic-bezier(.2,.75,.25,1) var(--reveal-delay, 0ms),
+    transform 700ms cubic-bezier(.2,.75,.25,1) var(--reveal-delay, 0ms);
+}
+
+.reveal-section[data-visible="true"] {
+  opacity: 1;
+  filter: blur(0);
+  transform: translateY(0) scale(1);
+}
+
+@media print {
+  header, footer, #model-page-nav, #model-news, button, .reveal-section:has(#compare-models) { display: none !important; }
+  .reveal-section { opacity: 1 !important; filter: none !important; transform: none !important; }
+  body { background: white !important; color: black !important; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
+  }
+  .reveal-section {
+    opacity: 1;
+    filter: none;
+    transform: none;
   }
 }

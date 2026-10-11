@@ -2,7 +2,9 @@ import { useEffect, useState, type ReactNode } from 'react'
 import type { TooltipContentProps } from 'recharts'
 
 const TOKENS = [
-  'series-social', 'series-tech', 'series-entertainment', 'series-magnitude',
+  'series-social', 'series-tech', 'series-entertainment', 'series-ai_models', 'series-science',
+  'series-business', 'series-startups', 'series-cybersecurity', 'series-health', 'series-climate',
+  'series-space', 'series-sports', 'series-gaming', 'series-magnitude',
   'series-positive', 'series-negative', 'rule', 'faint', 'muted', 'surface', 'sunken', 'ink',
 ] as const
 export type ChartColors = Record<(typeof TOKENS)[number], string>

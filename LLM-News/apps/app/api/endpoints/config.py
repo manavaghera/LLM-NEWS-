@@ -23,6 +23,10 @@ def contact_email() -> str:
     return email if re.fullmatch(r"[^@\s<>\"]+@[^@\s<>\"]+\.[^@\s<>\"]+", email) else ""
 
 
+def contact_address() -> str:
+    return os.getenv("CONTACT_ADDRESS", "").strip()[:300]
+
+
 @router.get("/summary-date")
 async def get_summary_date():
     """Get the summary video date"""
@@ -38,4 +42,5 @@ async def get_config():
         "summary_date": latest_summary_date(),
         "default_news_date": news_service.get_most_recent_date(),
         "contact_email": contact_email(),
+        "contact_address": contact_address(),
     }

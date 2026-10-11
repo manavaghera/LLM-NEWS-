@@ -39,7 +39,7 @@ export default defineConfig({
     {
       command: `npx vite --host 127.0.0.1 --port ${WEB_PORT} --strictPort`,
       url: `http://127.0.0.1:${WEB_PORT}`,
-      env: { BACKEND_URL: `http://127.0.0.1:${BACKEND_PORT}` },
+      env: { BACKEND_URL: `http://127.0.0.1:${BACKEND_PORT}`, VITE_E2E: 'true' },
       reuseExistingServer: false,
       timeout: 60_000,
     },

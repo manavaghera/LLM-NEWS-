@@ -2,6 +2,7 @@ import { Check, Copy, Newspaper, Search, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { useNews } from '@/api/queries'
+import { api } from '@/api/client'
 import type { NewsItem } from '@/api/types'
 import { FollowButton } from '@/components/news/LibraryButtons'
 import { LeadStory, StoryCard, StorySkeleton } from '@/components/news/StoryCard'
@@ -33,7 +34,8 @@ function CategoryBar({ counts }: { counts: Record<string, number> }) {
   const active = params.get('category') ?? 'all'
   const query = params.get('q') ?? ''
 
-  const update = (key: string, value: string) =>
+  const update = (key: string, value: string) => {
+    if (key === 'category' && value !== 'all') void api.analytics('category_view', value).catch(() => undefined)
     setParams(
       (prev) => {
         const next = new URLSearchParams(prev)
@@ -43,8 +45,9 @@ function CategoryBar({ counts }: { counts: Record<string, number> }) {
       },
       { replace: key === 'q' },
     )
+  }
 
-  const tabs = [{ value: 'all', label: 'All' }, ...CATEGORIES.filter((c) => counts[c.value])]
+  const tabs = [{ value: 'all', label: 'All' }, ...CATEGORIES]
 
   return (
     <div className="mb-8 flex flex-col gap-3 border-b border-rule pb-4 sm:flex-row sm:items-center sm:justify-between">
@@ -61,6 +64,7 @@ function CategoryBar({ counts }: { counts: Record<string, number> }) {
             )}
           >
             {tab.label}
+            {tab.value !== 'all' && <span aria-hidden className="ml-1 text-[0.7rem] opacity-65">{counts[tab.value] ?? 0}</span>}
           </button>
         ))}
       </div>
@@ -164,6 +168,9 @@ export function HomePage() {
 
   return (
     <div>
+      <title>{edition.isLatest ? 'Today’s verified AI news · NewsSense' : `${formatLongDate(edition.date)} news archive · NewsSense`}</title>
+      <meta name="description" content="Source-linked AI summaries across technology, science, business, security, health, climate, space, sports and culture." />
+      <link rel="canonical" href={`${window.location.origin}/`} />
       <div className="mb-6 flex flex-wrap items-baseline justify-between gap-2">
         <h1 className="headline text-4xl font-semibold tracking-tight">{edition.isLatest ? "Today's news" : 'News archive'}</h1>
         <div className="flex flex-col items-start gap-1 sm:items-end">

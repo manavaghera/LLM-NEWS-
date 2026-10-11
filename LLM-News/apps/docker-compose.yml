@@ -12,13 +12,15 @@ services:
       - "8000"
     environment:
       - DEBUG=false
+      - CACHE_DIR=/app/cache
       # Only nginx can reach the backend, so its X-Forwarded-For header identifies visitors for rate limits
       - TRUST_PROXY_HEADERS=true
     volumes:
       - ./static:/app/static:ro
       - cache:/app/cache  # generated translations, digests and audio
     env_file:
-      - ../.env
+      # Set APP_ENV_FILE when staging and production use separate secret files.
+      - ${APP_ENV_FILE:-../.env}
     restart: unless-stopped
     logging: *logging
     healthcheck:
@@ -53,11 +55,13 @@ services:
       dockerfile: pipeline/Dockerfile
     profiles: ["updates"]
     env_file:
-      - ../.env
+      - ${APP_ENV_FILE:-../.env}
     environment:
       - BACKEND_URL=http://backend:8000  # prepares the digest and briefing after new stories
+      - CACHE_DIR=/app/apps/cache
     volumes:
       - ./static:/app/apps/static  # the only service that writes the news
+      - cache:/app/apps/cache  # persistent usage and budget shared with the admin dashboard
     depends_on:
       - backend
     restart: unless-stopped
