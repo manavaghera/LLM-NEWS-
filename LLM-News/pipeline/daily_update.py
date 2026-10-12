@@ -102,7 +102,7 @@ def _run_once_locked(date: str, backend_url: str, email: bool, news_args: list,
 
 
 def run_every(minutes: int, backend_url: str, news_args: list, once: bool) -> int:
-    """Update now and then every `minutes` (counted from each start), recording each run for the website"""
+    """Update now, then wait `minutes` after completion before starting the next run."""
     while True:
         started = datetime.now()
         code, added, date = run_once(backend_url, False, news_args, update=True)
@@ -111,13 +111,16 @@ def run_every(minutes: int, backend_url: str, news_args: list, once: bool) -> in
                 return 0
             time.sleep(max(0.0, (started + timedelta(minutes=minutes) - datetime.now()).total_seconds()))
             continue
-        status = write_status(STATIC_DIR, date, minutes, added, ok=code == 0, now=started)
+        # A provider call can take longer than the requested interval. Record when publication
+        # actually completed so a successful long run does not immediately look overdue.
+        completed = datetime.now()
+        status = write_status(STATIC_DIR, date, minutes, added, ok=code == 0, now=completed)
         print(f"  {added} new stories; next update at {status['next_update'][11:16]}")
         if code != 0:
             alert_failure(date)
         if once:
             return code
-        time.sleep(max(0.0, (started + timedelta(minutes=minutes) - datetime.now()).total_seconds()))
+        time.sleep(max(0.0, (completed + timedelta(minutes=minutes) - datetime.now()).total_seconds()))
 
 
 def seconds_until(hh_mm: str) -> float:

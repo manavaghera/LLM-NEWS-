@@ -78,6 +78,23 @@ def test_hourly_run_writes_the_edition_first_then_only_updates(tmp_path, monkeyp
     assert status["added"] == 1 and status["ok"] and status["interval_minutes"] == 60
 
 
+def test_hourly_status_uses_publication_completion_time(tmp_path, monkeypatch):
+    started = datetime(2026, 10, 13, 1, 0, tzinfo=timezone.utc)
+    completed = started + timedelta(minutes=102)
+    times = iter((started, completed))
+
+    monkeypatch.setattr(daily_update, "STATIC_DIR", tmp_path)
+    monkeypatch.setattr(daily_update, "datetime", SimpleNamespace(now=lambda: next(times)))
+    monkeypatch.setattr(
+        daily_update, "run_once", lambda *args, **kwargs: (0, 29, "2026-10-13")
+    )
+
+    assert daily_update.run_every(60, "", [], once=True) == 0
+    status = json.loads((tmp_path / "update_status.json").read_text(encoding="utf-8"))
+    assert datetime.fromisoformat(status["last_update"]) == completed
+    assert datetime.fromisoformat(status["next_update"]) == completed + timedelta(hours=1)
+
+
 def test_overlapping_hourly_run_does_not_change_status_or_start_generation(tmp_path, monkeypatch):
     monkeypatch.setattr(daily_update, "STATIC_DIR", tmp_path)
     monkeypatch.setattr(daily_update, "acquire_update_lease", lambda owner, ttl: False)
