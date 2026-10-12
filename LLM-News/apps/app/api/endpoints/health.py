@@ -5,6 +5,7 @@ from fastapi import APIRouter, Response, status
 from ...services.llm_service import LLMService
 from ...services.update_status import read_update_status
 from ...core.config import settings
+from ...core.database import database_ready
 
 router = APIRouter()
 
@@ -37,6 +38,7 @@ async def readiness(response: Response):
         path.stem.removeprefix("group_").isdigit() for path in articles.glob("*/group_*.json")
     )
     checks = {
+        "database": database_ready(),
         "static_directory": Path("static").is_dir(),
         "cache_writable": cache_target.is_dir() and os.access(cache_target, os.W_OK),
         "published_news": published_news,

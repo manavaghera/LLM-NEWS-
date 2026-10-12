@@ -3,11 +3,10 @@
 Only allow-listed event names and normalized API route patterns are stored. The database
 contains no IP addresses, cookies, user agents, search text, story ids, or account profiles.
 """
-import os
-import sqlite3
 from contextlib import contextmanager
-from datetime import date, datetime, timedelta, timezone
-from pathlib import Path
+from datetime import date, timedelta
+
+from .database import connect
 
 
 PUBLIC_EVENTS = {
@@ -18,35 +17,10 @@ PUBLIC_CATEGORIES = {"ai_models", "social", "tech", "science", "business", "star
                      "health", "climate", "space", "sports", "gaming", "entertainment"}
 
 
-def _path() -> Path:
-    root = Path(os.getenv("CACHE_DIR", str(Path(__file__).resolve().parents[2] / "cache")))
-    return root / "analytics.db"
-
-
 @contextmanager
 def _db():
-    path = _path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    db = sqlite3.connect(path, timeout=15)
-    db.row_factory = sqlite3.Row
-    try:
-        db.executescript("""
-            CREATE TABLE IF NOT EXISTS analytics_events (
-                day TEXT NOT NULL, event TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 0,
-                PRIMARY KEY(day, event));
-            CREATE TABLE IF NOT EXISTS runtime_requests (
-                day TEXT NOT NULL, route TEXT NOT NULL, method TEXT NOT NULL, status_group TEXT NOT NULL,
-                count INTEGER NOT NULL DEFAULT 0, total_ms INTEGER NOT NULL DEFAULT 0,
-                max_ms INTEGER NOT NULL DEFAULT 0,
-                PRIMARY KEY(day, route, method, status_group));
-            CREATE TABLE IF NOT EXISTS analytics_breakdowns (
-                day TEXT NOT NULL, event TEXT NOT NULL, detail TEXT NOT NULL,
-                count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(day,event,detail));
-        """)
-        with db:
-            yield db
-    finally:
-        db.close()
+    with connect("analytics") as db:
+        yield db
 
 
 def record_event(event: str, detail: str = "") -> None:
@@ -54,7 +28,7 @@ def record_event(event: str, detail: str = "") -> None:
         raise ValueError("Unsupported analytics event")
     with _db() as db:
         db.execute("""INSERT INTO analytics_events(day,event,count) VALUES(?,?,1)
-                   ON CONFLICT(day,event) DO UPDATE SET count=count+1""",
+                   ON CONFLICT(day,event) DO UPDATE SET count=analytics_events.count+1""",
                    (date.today().isoformat(), event))
         safe_detail = ""
         if event == "category_view" and detail in PUBLIC_CATEGORIES:
@@ -63,7 +37,8 @@ def record_event(event: str, detail: str = "") -> None:
             safe_detail = detail
         if safe_detail:
             db.execute("""INSERT INTO analytics_breakdowns(day,event,detail,count) VALUES(?,?,?,1)
-                       ON CONFLICT(day,event,detail) DO UPDATE SET count=count+1""",
+                       ON CONFLICT(day,event,detail) DO UPDATE SET
+                       count=analytics_breakdowns.count+1""",
                        (date.today().isoformat(), event, safe_detail))
 
 
@@ -76,7 +51,10 @@ def record_request(route: str, method: str, status: int, duration_ms: int) -> No
     with _db() as db:
         db.execute("""INSERT INTO runtime_requests(day,route,method,status_group,count,total_ms,max_ms)
                    VALUES(?,?,?,?,1,?,?) ON CONFLICT(day,route,method,status_group) DO UPDATE SET
-                   count=count+1,total_ms=total_ms+excluded.total_ms,max_ms=MAX(max_ms,excluded.max_ms)""",
+                   count=runtime_requests.count+1,
+                   total_ms=runtime_requests.total_ms+excluded.total_ms,
+                   max_ms=CASE WHEN runtime_requests.max_ms > excluded.max_ms
+                               THEN runtime_requests.max_ms ELSE excluded.max_ms END""",
                    (date.today().isoformat(), route, method, status_group, elapsed, elapsed))
 
 

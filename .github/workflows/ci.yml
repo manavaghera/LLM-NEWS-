@@ -35,7 +35,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - run: cp LLM-News/.env.example LLM-News/.env
-      - run: sed -i 's/^DOMAIN=$/DOMAIN=news.example.com/; s/^STAGING_DOMAIN=$/STAGING_DOMAIN=staging.news.example.com/' LLM-News/.env
+      - run: sed -i 's/^DOMAIN=$/DOMAIN=news.example.com/; s/^STAGING_DOMAIN=$/STAGING_DOMAIN=staging.news.example.com/; s/^POSTGRES_PASSWORD=$/POSTGRES_PASSWORD=ci-only-postgres-password-123456/' LLM-News/.env
       - run: NEWS_DATA_DIR=/tmp/newssense-production docker compose --env-file ../.env -f docker-compose.yml -f docker-compose.prod.yml config --format json > /tmp/production.json
         working-directory: LLM-News/apps
       - run: NEWS_DATA_DIR=/tmp/newssense-staging docker compose -p newssense-staging --env-file ../.env -f docker-compose.yml -f docker-compose.staging.yml config --format json > /tmp/staging.json
@@ -79,6 +79,39 @@ jobs:
           cache-dependency-path: LLM-News/apps/requirements*.txt
       - run: pip install -r requirements-dev.txt
       - run: python -m pytest tests -q
+
+  postgres:
+    name: PostgreSQL storage and migration
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: newssense_test
+          POSTGRES_USER: newssense
+          POSTGRES_PASSWORD: postgres-ci-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U newssense -d newssense_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: LLM-News/apps
+    env:
+      TEST_POSTGRES_URL: postgresql://newssense:postgres-ci-password@localhost:5432/newssense_test
+      DATABASE_URL: postgresql://newssense:postgres-ci-password@localhost:5432/newssense_test
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: LLM-News/apps/requirements*.txt
+      - run: pip install -r requirements-dev.txt
+      - run: python -m pytest tests/test_postgres_storage.py -q
 
   news-script:
     name: News script tests

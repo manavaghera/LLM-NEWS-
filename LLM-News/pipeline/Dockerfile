@@ -12,6 +12,7 @@ RUN pip install --no-cache-dir -r requirements/quick_news.txt
 COPY llm_client.py ./
 COPY apps/app/core/providers.py apps/app/core/providers.py
 COPY apps/app/core/generation.py apps/app/core/generation.py
+COPY apps/app/core/database.py apps/app/core/database.py
 COPY pipeline/ pipeline/
 
 # uid 1000 is usually the owner of the apps/static folder it writes into

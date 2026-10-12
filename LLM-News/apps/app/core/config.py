@@ -30,6 +30,7 @@ class Settings:
 
     # Writable folder for generated translations, digests and audio (static/ is read-only in Docker)
     CACHE_DIR: Path = Path(os.getenv("CACHE_DIR", "cache"))
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "").strip()
 
     # Public address of the site, used in share previews and the RSS feed (e.g. https://news.example.com).
     # When empty, the address of the incoming request is used.
@@ -47,6 +48,12 @@ class Settings:
             issues.append("ALLOWED_HOSTS must name the public host")
         if len(os.getenv("ADMIN_TOKEN", "")) < 24:
             issues.append("ADMIN_TOKEN must be at least 24 characters")
+        if not cls.DATABASE_URL.startswith(("postgresql://", "postgres://")):
+            issues.append("DATABASE_URL must use PostgreSQL")
+        else:
+            database_password = os.getenv("PGPASSWORD", "") or (urlsplit(cls.DATABASE_URL).password or "")
+            if len(database_password) < 24:
+                issues.append("PostgreSQL password must be at least 24 characters")
         if cls.PUBLIC_BASE_URL:
             host = urlsplit(cls.PUBLIC_BASE_URL).hostname
             if host and cls.ALLOWED_HOSTS != ["*"] and host not in cls.ALLOWED_HOSTS:

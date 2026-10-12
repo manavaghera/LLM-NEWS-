@@ -4,10 +4,10 @@ Only operational metadata is recorded: no API keys, prompts, article text or vis
 The daily limit counts attempted pipeline calls, including failed calls, across processes/restarts.
 """
 import os
-import sqlite3
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
-from pathlib import Path
+
+from .database import connect
 
 
 class PipelineBudgetExceeded(RuntimeError):
@@ -18,49 +18,16 @@ def _now():
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def _path():
-    return Path(os.getenv("CACHE_DIR", str(Path(__file__).resolve().parents[2] / "cache"))) / "generation.db"
-
-
 @contextmanager
 def _db():
-    path = _path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    db = sqlite3.connect(path, timeout=30)
-    db.row_factory = sqlite3.Row
-    try:
-        db.executescript("""
-            CREATE TABLE IF NOT EXISTS generation_settings (key TEXT PRIMARY KEY, value INTEGER NOT NULL);
-            CREATE TABLE IF NOT EXISTS generation_calls (
-                id INTEGER PRIMARY KEY, day TEXT NOT NULL, started_at TEXT NOT NULL,
-                scope TEXT NOT NULL, provider TEXT NOT NULL, model TEXT NOT NULL,
-                status TEXT NOT NULL, prompt_tokens INTEGER NOT NULL DEFAULT 0,
-                completion_tokens INTEGER NOT NULL DEFAULT 0);
-            CREATE INDEX IF NOT EXISTS generation_calls_day ON generation_calls(day, scope);
-            CREATE TABLE IF NOT EXISTS generation_feeds (
-                url TEXT NOT NULL, category TEXT NOT NULL, publisher TEXT NOT NULL,
-                ok INTEGER NOT NULL, items INTEGER NOT NULL, full_text_items INTEGER NOT NULL,
-                error TEXT NOT NULL, last_checked TEXT NOT NULL, PRIMARY KEY(url, category));
-            CREATE TABLE IF NOT EXISTS generation_runs (
-                id INTEGER PRIMARY KEY, started_at TEXT NOT NULL, finished_at TEXT,
-                date TEXT NOT NULL, status TEXT NOT NULL, added INTEGER NOT NULL DEFAULT 0,
-                held_back INTEGER NOT NULL DEFAULT 0, error TEXT NOT NULL DEFAULT '');
-            CREATE TABLE IF NOT EXISTS generation_holds (
-                id INTEGER PRIMARY KEY, created_at TEXT NOT NULL, date TEXT NOT NULL,
-                category TEXT NOT NULL, headline TEXT NOT NULL, reason TEXT NOT NULL);
-            CREATE TABLE IF NOT EXISTS generation_leases (
-                name TEXT PRIMARY KEY, owner TEXT NOT NULL, expires_at TEXT NOT NULL);
-        """)
-        with db:
-            yield db
-    finally:
-        db.close()
+    with connect("generation") as db:
+        yield db
 
 
 def _setting_limit(db, key, env_name, fallback):
     saved = db.execute("SELECT value FROM generation_settings WHERE key=?", (key,)).fetchone()
     if saved:
-        return int(saved[0])
+        return int(saved["value"])
     try:
         return max(0, int(os.getenv(env_name, str(fallback))))
     except ValueError:
@@ -80,24 +47,24 @@ def start_call(provider, model, scope="pipeline"):
     today = date.today().isoformat()
     month = today[:7]
     with _db() as db:
-        db.execute("BEGIN IMMEDIATE")
+        db.write_lock("generation-budget")
         if scope == "pipeline":
             limit = _limit(db)
-            used = db.execute("SELECT COUNT(*) FROM generation_calls WHERE day=? AND scope='pipeline'", (today,)).fetchone()[0]
+            used = db.execute("SELECT COUNT(*) AS count FROM generation_calls WHERE day=? AND scope='pipeline'",
+                              (today,)).fetchone()["count"]
             if limit and used >= limit:
                 raise PipelineBudgetExceeded(f"The daily news-generation limit ({limit} AI calls) has been reached.")
             monthly_limit = _monthly_limit(db)
-            monthly_used = db.execute(
-                "SELECT COUNT(*) FROM generation_calls WHERE day LIKE ? AND scope='pipeline'", (month + "-%",)
-            ).fetchone()[0]
+            monthly_used = db.execute("""SELECT COUNT(*) AS count FROM generation_calls
+                                       WHERE day LIKE ? AND scope='pipeline'""",
+                                      (month + "-%",)).fetchone()["count"]
             if monthly_limit and monthly_used >= monthly_limit:
                 raise PipelineBudgetExceeded(
                     f"The monthly news-generation limit ({monthly_limit} AI calls) has been reached."
                 )
-        result = db.execute(
+        return db.insert_id(
             "INSERT INTO generation_calls(day,started_at,scope,provider,model,status) VALUES(?,?,?,?,?,'running')",
             (today, _now(), scope, str(provider), str(model)))
-        return int(result.lastrowid)
 
 
 def finish_call(call_id, response=None, failed=False):
@@ -114,11 +81,12 @@ def usage_summary():
     today = date.today().isoformat()
     month = today[:7]
     with _db() as db:
-        used = db.execute("SELECT COUNT(*) FROM generation_calls WHERE day=? AND scope='pipeline'", (today,)).fetchone()[0]
+        used = db.execute("SELECT COUNT(*) AS count FROM generation_calls WHERE day=? AND scope='pipeline'",
+                          (today,)).fetchone()["count"]
         limit = _limit(db)
-        monthly_used = db.execute(
-            "SELECT COUNT(*) FROM generation_calls WHERE day LIKE ? AND scope='pipeline'", (month + "-%",)
-        ).fetchone()[0]
+        monthly_used = db.execute("""SELECT COUNT(*) AS count FROM generation_calls
+                                   WHERE day LIKE ? AND scope='pipeline'""",
+                                  (month + "-%",)).fetchone()["count"]
         monthly_limit = _monthly_limit(db)
         models = db.execute("""SELECT provider,model,COUNT(*) AS calls,
                     SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END) AS failed,
@@ -173,8 +141,8 @@ def feed_statuses():
 
 def start_run(edition_date):
     with _db() as db:
-        row = db.execute("INSERT INTO generation_runs(started_at,date,status) VALUES(?,?,'running')", (_now(), edition_date))
-        return int(row.lastrowid)
+        return db.insert_id("INSERT INTO generation_runs(started_at,date,status) VALUES(?,?,'running')",
+                            (_now(), edition_date))
 
 
 def finish_run(run_id, ok, added=0, held_back=0):
@@ -210,7 +178,7 @@ def acquire_update_lease(owner: str, ttl_seconds: int = 7200) -> bool:
     now = datetime.now(timezone.utc)
     expires = (now + timedelta(seconds=ttl_seconds)).isoformat(timespec="seconds")
     with _db() as db:
-        db.execute("BEGIN IMMEDIATE")
+        db.write_lock("news-updater")
         saved = db.execute("SELECT owner,expires_at FROM generation_leases WHERE name='news-updater'").fetchone()
         if saved:
             try:

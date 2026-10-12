@@ -1,13 +1,12 @@
-"""Reader reports ("Report a problem") stored in SQLite in the writable cache folder.
+"""Reader reports and corrections stored in SQLite or the configured PostgreSQL database.
 
 Only what the reader typed is kept: no IP address, account or other personal data.
 """
-import sqlite3
-from contextlib import closing
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Dict, Iterable, List
 
-from ..core.config import settings
+from ..core.database import connect, sqlite_path, using_postgres
 from .news_service import NewsService
 from .story_identity import story_identity
 
@@ -21,56 +20,23 @@ KINDS = {
 
 class ReportService:
     def __init__(self):
-        self.path = settings.CACHE_DIR / "reports.db"
+        self.path = sqlite_path("reports")
         self.news = NewsService()
 
-    def _connect(self) -> sqlite3.Connection:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        connection = sqlite3.connect(self.path)
-        connection.execute("PRAGMA foreign_keys = ON")
-        connection.execute(
-            """CREATE TABLE IF NOT EXISTS reports (
-                   id INTEGER PRIMARY KEY AUTOINCREMENT,
-                   created_at TEXT NOT NULL,
-                   date TEXT NOT NULL,
-                   group_id TEXT NOT NULL,
-                   kind TEXT NOT NULL,
-                   message TEXT NOT NULL
-               )"""
-        )
-        connection.execute(
-            """CREATE TABLE IF NOT EXISTS report_articles (
-                   report_id INTEGER PRIMARY KEY REFERENCES reports(id),
-                   story_identity TEXT NOT NULL,
-                   original_headline TEXT NOT NULL
-               )"""
-        )
-        connection.execute(
-            """CREATE TABLE IF NOT EXISTS report_resolutions (
-                   report_id INTEGER PRIMARY KEY REFERENCES reports(id),
-                   status TEXT NOT NULL CHECK(status IN ('open', 'resolved', 'dismissed')),
-                   resolution TEXT NOT NULL,
-                   resolved_at TEXT
-               )"""
-        )
-        connection.execute(
-            """CREATE TABLE IF NOT EXISTS corrections (
-                   id INTEGER PRIMARY KEY AUTOINCREMENT,
-                   report_id INTEGER NOT NULL REFERENCES reports(id),
-                   created_at TEXT NOT NULL,
-                   text TEXT NOT NULL,
-                   UNIQUE(report_id, text)
-               )"""
-        )
-        return connection
+    @contextmanager
+    def _connect(self):
+        with connect("reports") as database:
+            yield database
+
+    def _storage_exists(self) -> bool:
+        return using_postgres() or self.path.exists()
 
     def add(self, date: str, group_id: str, kind: str, message: str, article: Dict = None) -> int:
-        with closing(self._connect()) as db, db:
-            cursor = db.execute(
+        with self._connect() as db:
+            report_id = db.insert_id(
                 "INSERT INTO reports (created_at, date, group_id, kind, message) VALUES (?, ?, ?, ?, ?)",
                 (datetime.now(timezone.utc).isoformat(timespec="seconds"), date, group_id, kind, message.strip()),
             )
-            report_id = int(cursor.lastrowid)
             if article:
                 db.execute("INSERT INTO report_articles VALUES (?, ?, ?)",
                            (report_id, story_identity(article), str(article.get("headline", ""))))
@@ -78,18 +44,18 @@ class ReportService:
 
     def counts_by_date(self, dates: Iterable[str]) -> Dict[str, int]:
         dates = list(dates)
-        if not dates or not self.path.exists():
+        if not dates or not self._storage_exists():
             return {}
         marks = ",".join("?" for _ in dates)
-        with closing(self._connect()) as db:
-            rows = db.execute(f"SELECT date, COUNT(*) FROM reports WHERE date IN ({marks}) GROUP BY date", dates)
-            return {date: count for date, count in rows}
+        with self._connect() as db:
+            rows = db.execute(f"SELECT date, COUNT(*) AS count FROM reports WHERE date IN ({marks}) GROUP BY date",
+                              dates)
+            return {row["date"]: row["count"] for row in rows}
 
     def latest(self, limit: int = 200) -> List[Dict]:
-        if not self.path.exists():
+        if not self._storage_exists():
             return []
-        with closing(self._connect()) as db:
-            db.row_factory = sqlite3.Row
+        with self._connect() as db:
             rows = db.execute(
                 """SELECT r.*, COALESCE(s.status, 'open') AS status,
                           COALESCE(s.resolution, '') AS resolution, s.resolved_at,
@@ -105,8 +71,7 @@ class ReportService:
                                                   and story_identity(current) == report["story_identity"])}
 
     def resolve(self, report_id: int, status: str, resolution: str) -> Dict:
-        with closing(self._connect()) as db, db:
-            db.row_factory = sqlite3.Row
+        with self._connect() as db:
             report = db.execute("""SELECT r.*, a.story_identity, a.original_headline FROM reports r
                                   LEFT JOIN report_articles a ON a.report_id = r.id WHERE r.id = ?""",
                                 (report_id,)).fetchone()
@@ -125,8 +90,7 @@ class ReportService:
     def publish_correction(self, report_id: int, text: str) -> Dict:
         """Publish and resolve in one transaction; a retried request reuses the original note."""
         text = text.strip()
-        with closing(self._connect()) as db, db:
-            db.row_factory = sqlite3.Row
+        with self._connect() as db:
             report = db.execute("""SELECT r.*, a.story_identity, a.original_headline FROM reports r
                                   LEFT JOIN report_articles a ON a.report_id = r.id WHERE r.id = ?""",
                                 (report_id,)).fetchone()
@@ -135,7 +99,8 @@ class ReportService:
             if not self._decorate_report(dict(report))["article_matches"]:
                 raise ValueError("The article was replaced or this report's original story cannot be verified")
             created_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
-            db.execute("INSERT OR IGNORE INTO corrections (report_id, created_at, text) VALUES (?, ?, ?)",
+            db.execute("""INSERT INTO corrections (report_id, created_at, text) VALUES (?, ?, ?)
+                       ON CONFLICT(report_id, text) DO NOTHING""",
                        (report_id, created_at, text))
             correction = db.execute(
                 "SELECT id, created_at, text FROM corrections WHERE report_id = ? AND text = ?", (report_id, text)
@@ -149,13 +114,12 @@ class ReportService:
             return dict(correction)
 
     def corrections_for_article(self, date: str, group_id: str, article: Dict = None) -> List[Dict]:
-        if not self.path.exists():
+        if not self._storage_exists():
             return []
         current = article if article is not None else self.news.get_article(date, group_id)
         if not current:
             return []
-        with closing(self._connect()) as db:
-            db.row_factory = sqlite3.Row
+        with self._connect() as db:
             rows = db.execute(
                 """SELECT c.id, c.created_at, c.text FROM corrections c
                    JOIN reports r ON r.id = c.report_id WHERE r.date = ? AND r.group_id = ?

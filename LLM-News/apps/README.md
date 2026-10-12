@@ -46,8 +46,9 @@ web/src/
 tests/                       # backend tests
 ```
 
-Generated translations, digests, audio and reader reports are written to `cache/` (a Docker volume),
-because `static/` is mounted read-only in Docker.
+Generated translations, digests and audio are written to `cache/` (a Docker volume), because `static/`
+is mounted read-only in Docker. Docker stores reports, corrections, analytics, budgets and updater leases
+in PostgreSQL; local development keeps those records in SQLite unless `DATABASE_URL` is set.
 
 ## Tests
 
@@ -92,8 +93,8 @@ site needs a paid provider.
 HTTPS certificate from Let's Encrypt, renews it, and redirects http to https.
 
 1. A Linux server with Docker, ports 80 and 443 open, and a DNS `A` record pointing your domain at it.
-2. In `../.env`: `DOMAIN=news.example.com`, an AI key, and `ADMIN_TOKEN` if you want to read reader
-   reports. `PUBLIC_BASE_URL` is set to `https://$DOMAIN` for you.
+2. In `../.env`: `DOMAIN=news.example.com`, an AI key, a random `POSTGRES_PASSWORD` and `ADMIN_TOKEN`
+   of at least 24 characters. `PUBLIC_BASE_URL` is set to `https://$DOMAIN` for you.
 3. Copy the news (`static/`) to the server, or run the news script there.
 4. Start it, with hourly news updates (see below):
 
@@ -116,7 +117,7 @@ nginx serves article images and audio straight from `static/` and sends a strict
 (`web/security-headers.conf`); logs are capped at 3 × 10 MB per service. Back up nightly:
 
 ```bash
-./scripts/backup.sh /var/backups/newssense     # the news archive and the cache volume (reader reports)
+./scripts/backup.sh /var/backups/newssense production  # news, generated cache and PostgreSQL
 ```
 
 The script's header has the cron line and how to restore. Copy the backups off the server as well.
@@ -126,8 +127,9 @@ The script's header has the cron line and how to restore. Copy the backups off t
 Set a random `ADMIN_TOKEN` of at least 24 characters in `../.env`, restart the backend and open `/admin`.
 The token is exchanged for a signed, HTTP-only, same-site session that expires after eight hours. The
 dashboard shows update failures, stale news, feed health, held-back drafts, recent runs, aggregate route
-errors and model/token usage. Daily and monthly pipeline limits persist in `cache/generation.db`, shared
-with the Docker updater; 0 disables a limit. Website AI requests retain their separate existing limits.
+errors and model/token usage. Daily and monthly pipeline limits persist in PostgreSQL in Docker (SQLite
+in local development) and are shared with the updater; 0 disables a limit. Website AI requests retain
+their separate existing limits.
 
 Review reader reports, save private resolutions, dismiss or reopen reports, and publish dated public
 correction notes. Public article pages show correction history without exposing reader messages.
@@ -144,8 +146,8 @@ JSON library backup, merging duplicates so readers can move their library betwee
 
 ## Reader reports API
 
-Reports from the article page's "Report a problem" button are stored in `cache/reports.db`, without any
-personal data. Set `ADMIN_TOKEN` in `../.env` and read them with:
+Reports from the article page's "Report a problem" button are stored in PostgreSQL in Docker and
+`cache/reports.db` during local development, without personal data. Set `ADMIN_TOKEN` in `../.env` and read them with:
 
 ```bash
 curl -H "X-Admin-Token: <your token>" http://localhost:3000/api/reports

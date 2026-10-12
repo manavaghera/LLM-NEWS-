@@ -46,6 +46,7 @@ Use `.env.example` as the field list. At minimum set:
 LLM_PUBLISHER=NVIDIA
 NVIDIA_API_KEY=replace-me
 ADMIN_TOKEN=replace-with-at-least-24-random-characters
+POSTGRES_PASSWORD=replace-with-at-least-24-random-characters
 DOMAIN=newssense-example.duckdns.org
 PUBLIC_BASE_URL=https://newssense-example.duckdns.org
 ALLOWED_ORIGINS=https://newssense-example.duckdns.org
@@ -86,14 +87,15 @@ deployment, an existing archive under `apps/static` is copied into the new durab
 
 ## 5. Verify backups
 
-The nightly job validates article JSON and SQLite integrity before it reports success. Test any pair without
+The nightly job validates article JSON, generated cache and the PostgreSQL dump before it reports success. Test a backup set without
 changing the live site:
 
 ```bash
 cd /opt/newssense/repo/LLM-News/apps
 BACKUP_ENCRYPTION_PASSPHRASE='the-backup-secret' sh scripts/verify-backup.sh \
   /opt/newssense/backups/static-DATE.tar.gz.enc \
-  /opt/newssense/backups/cache-DATE.tar.gz.enc
+  /opt/newssense/backups/cache-DATE.tar.gz.enc \
+  /opt/newssense/backups/database-DATE.dump.enc
 ```
 
 Copy `deployment/oracle-cloud/backup.env.example` to `/opt/newssense/backup.env`. Put

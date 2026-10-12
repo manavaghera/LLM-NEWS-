@@ -2,6 +2,10 @@
 # docker compose -p newssense-staging --env-file ../.env.staging \
 #   -f docker-compose.yml -f docker-compose.staging.yml --profile updates up -d --build
 services:
+  database:
+    environment:
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+
   backend:
     environment:
       - APP_ENV=staging
@@ -9,6 +13,7 @@ services:
       - PUBLIC_BASE_URL=https://${STAGING_DOMAIN:?Set STAGING_DOMAIN}
       - ALLOWED_ORIGINS=https://${STAGING_DOMAIN:?Set STAGING_DOMAIN}
       - ALLOWED_HOSTS=${STAGING_DOMAIN:?Set STAGING_DOMAIN},backend,localhost
+      - PGPASSWORD=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
 
   frontend:
     ports: !reset []
@@ -18,6 +23,7 @@ services:
   updater:
     environment:
       - UPDATE_MINUTES=${STAGING_UPDATE_MINUTES:-60}
+      - PGPASSWORD=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
 
   caddy:
     image: caddy:2-alpine

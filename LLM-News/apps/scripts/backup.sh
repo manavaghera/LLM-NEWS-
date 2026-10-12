@@ -56,6 +56,7 @@ fi
 
 static_archive="$dest/static-$stamp.tar.gz"
 cache_archive="$dest/cache-$stamp.tar.gz"
+database_dump="$dest/database-$stamp.dump"
 tar -czf "$static_archive" -C "$NEWS_DATA_DIR" .
 echo "news archive -> $static_archive"
 
@@ -65,43 +66,67 @@ if [ -z "$backend" ]; then
   exit 1
 fi
 
-# Make transactionally consistent copies of every SQLite database before archiving the volume.
+# Snapshot generated cache files in a container-local temporary directory. SQLite's backup API
+# replaces copied database/WAL files with consistent databases under their original names.
 docker compose "$@" exec -T backend python -c "
-import pathlib, sqlite3
-for db in pathlib.Path('cache').glob('*.db'):
-    backup = db.with_name(db.stem + '-backup.db')
-    if '-backup' not in db.stem:
-        with sqlite3.connect(db) as source, sqlite3.connect(backup) as copy:
-            source.backup(copy)
-"
-docker run --rm --volumes-from "$backend" -v "$dest:/backup" alpine \
-  tar -czf "/backup/cache-$stamp.tar.gz" -C /app/cache .
+import pathlib, shutil, sqlite3, sys, tarfile, tempfile
+from contextlib import closing
+source_root = pathlib.Path('cache')
+with tempfile.TemporaryDirectory(prefix='newssense-cache-') as temporary:
+    snapshot = pathlib.Path(temporary) / 'cache'
+    shutil.copytree(source_root, snapshot)
+    for pattern in ('*.db', '*.db-wal', '*.db-shm'):
+        for copied in snapshot.glob(pattern):
+            copied.unlink()
+    for database in source_root.glob('*.db'):
+        with closing(sqlite3.connect(database)) as source, closing(sqlite3.connect(snapshot / database.name)) as target:
+            source.backup(target)
+    with tarfile.open(fileobj=sys.stdout.buffer, mode='w|gz') as bundle:
+        for path in snapshot.rglob('*'):
+            bundle.add(path, arcname=path.relative_to(snapshot), recursive=False)
+" > "$cache_archive"
 echo "cache volume -> $cache_archive"
+
+database=$(docker compose "$@" ps -q database)
+if [ -z "$database" ]; then
+  echo "The PostgreSQL service isn't running, so no consistent database backup can be made." >&2
+  exit 1
+fi
+docker compose "$@" exec -T database sh -c \
+  'exec pg_dump --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" --format=custom' > "$database_dump"
+if [ ! -s "$database_dump" ]; then
+  echo "PostgreSQL produced an empty backup." >&2
+  exit 1
+fi
+docker compose "$@" exec -T database pg_restore --list < "$database_dump" >/dev/null
+echo "PostgreSQL database -> $database_dump"
 
 if [ -n "${BACKUP_ENCRYPTION_PASSPHRASE:-}" ]; then
   command -v openssl >/dev/null 2>&1 || {
     echo "BACKUP_ENCRYPTION_PASSPHRASE is set but openssl is unavailable." >&2
     exit 1
   }
-  for archive in "$static_archive" "$cache_archive"; do
+  for archive in "$static_archive" "$cache_archive" "$database_dump"; do
     openssl enc -aes-256-cbc -salt -pbkdf2 -iter 200000 \
       -pass env:BACKUP_ENCRYPTION_PASSPHRASE -in "$archive" -out "$archive.enc"
     rm -f "$archive"
   done
   static_archive="$static_archive.enc"
   cache_archive="$cache_archive.enc"
-  echo "encrypted both archives"
+  database_dump="$database_dump.enc"
+  echo "encrypted all backup files"
 fi
 
 manifest="$dest/manifest-$stamp.sha256"
 (
   cd "$dest"
-  sha256sum "$(basename "$static_archive")" "$(basename "$cache_archive")" > "$(basename "$manifest")"
+  sha256sum "$(basename "$static_archive")" "$(basename "$cache_archive")" \
+    "$(basename "$database_dump")" > "$(basename "$manifest")"
   sha256sum -c "$(basename "$manifest")" >/dev/null
 )
 
-sh "$(dirname "$0")/verify-backup.sh" "$static_archive" "$cache_archive"
-echo "verified archive contents and SQLite integrity"
+sh "$(dirname "$0")/verify-backup.sh" "$static_archive" "$cache_archive" "$database_dump"
+echo "verified news, cache and PostgreSQL restore inputs"
 
 aws_command() {
   if [ -n "${BACKUP_S3_ENDPOINT:-}" ]; then
@@ -126,10 +151,12 @@ if [ -n "${BACKUP_S3_URI:-}" ]; then
   }
   upload_file "$static_archive"
   upload_file "$cache_archive"
+  upload_file "$database_dump"
   upload_file "$manifest"
 fi
 
 # Delete only files produced by this script, never unrelated files in the destination.
 find "$dest" -type f \( -name 'static-*.tar.gz' -o -name 'static-*.tar.gz.enc' \
   -o -name 'cache-*.tar.gz' -o -name 'cache-*.tar.gz.enc' \
+  -o -name 'database-*.dump' -o -name 'database-*.dump.enc' \
   -o -name 'manifest-*.sha256' \) -mtime +"$keep_days" -delete

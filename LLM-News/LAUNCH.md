@@ -16,7 +16,7 @@ Before promotion, check `/api/health/ready`. It returns HTTP 503 when news is st
 
 ## Required secrets
 
-Set one paid AI provider key, `DOMAIN`, `PUBLIC_BASE_URL`, a random `ADMIN_TOKEN` of at least 24 characters, `CONTACT_EMAIL`, `CONTACT_ADDRESS`, and provider-side currency limits. Set `ALERT_WEBHOOK_URL` to receive updater failure alerts. Keep `.env.production` off Git and store it in the hosting provider's secret manager.
+Set one paid AI provider key, `DOMAIN`, `PUBLIC_BASE_URL`, a random `ADMIN_TOKEN` of at least 24 characters, a random `POSTGRES_PASSWORD` of at least 24 characters, `CONTACT_EMAIL`, `CONTACT_ADDRESS`, and provider-side currency limits. Set `ALERT_WEBHOOK_URL` to receive updater failure alerts. Keep `.env.production` off Git and store it in the hosting provider's secret manager.
 
 ## Promotion
 
@@ -28,9 +28,9 @@ Set one paid AI provider key, `DOMAIN`, `PUBLIC_BASE_URL`, a random `ADMIN_TOKEN
 
 ## Backups and recovery
 
-Run `apps/scripts/backup.sh` nightly. The script creates transactionally consistent copies of all SQLite databases, validates every article, runs `PRAGMA integrity_check`, writes SHA-256 checksums and can upload to S3 or Cloudflare R2. Set `BACKUP_ENCRYPTION_PASSPHRASE` so off-site archives are encrypted, then set `BACKUP_S3_URI` and optionally `BACKUP_S3_ENDPOINT`. Once per month, restore into a new staging Compose project and open several archived editions. `apps/scripts/verify-backup.sh` performs the same non-destructive archive checks manually.
+Run `apps/scripts/backup.sh` nightly. It creates a PostgreSQL custom-format dump plus news and generated-cache archives, validates every article and legacy SQLite file, validates the database dump with `pg_restore`, writes SHA-256 checksums and can upload to S3 or Cloudflare R2. Set `BACKUP_ENCRYPTION_PASSPHRASE` so off-site files are encrypted, then set `BACKUP_S3_URI` and optionally `BACKUP_S3_ENDPOINT`. Once per month, restore into a new staging Compose project and open several archived editions. `apps/scripts/verify-backup.sh` performs the same non-destructive checks manually.
 
-This repository currently uses SQLite databases in the persistent cache volume for reports, generation usage and aggregate analytics. That is safe for one application host with tested backups. A multi-host deployment still requires migrating those stores to PostgreSQL before launch; do not run multiple backend writers against copied cache volumes.
+Docker deployments use PostgreSQL for reports, corrections, generation usage, aggregate analytics and updater coordination. On its first start, the backend imports missing records from the previous SQLite files in the cache volume before it becomes healthy. Local development without `DATABASE_URL` continues to use SQLite. The import can also be run explicitly with `python apps/scripts/migrate_sqlite_to_postgres.py --cache-dir apps/cache`.
 
 ## Launch gates
 

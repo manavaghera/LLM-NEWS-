@@ -28,4 +28,6 @@ USER appuser
 EXPOSE 8000
 
 # Run the application
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Import any operational data left by a pre-PostgreSQL deployment before accepting traffic.
+# The migration is idempotent and exits immediately when there are no legacy SQLite files.
+CMD ["sh", "-c", "python scripts/migrate_sqlite_to_postgres.py --cache-dir /app/cache --if-present && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]

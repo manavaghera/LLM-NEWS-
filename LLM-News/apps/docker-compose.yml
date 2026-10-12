@@ -6,6 +6,22 @@ x-logging: &logging
     max-file: "3"
 
 services:
+  database:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-newssense}
+      - POSTGRES_USER=${POSTGRES_USER:-newssense}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-newssense-development-only}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    logging: *logging
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   backend:
     build: .
     expose:
@@ -13,6 +29,8 @@ services:
     environment:
       - DEBUG=false
       - CACHE_DIR=/app/cache
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-newssense}@database:5432/${POSTGRES_DB:-newssense}
+      - PGPASSWORD=${POSTGRES_PASSWORD:-newssense-development-only}
       # Only nginx can reach the backend, so its X-Forwarded-For header identifies visitors for rate limits
       - TRUST_PROXY_HEADERS=true
     volumes:
@@ -21,6 +39,9 @@ services:
     env_file:
       # Set APP_ENV_FILE when staging and production use separate secret files.
       - ${APP_ENV_FILE:-../.env}
+    depends_on:
+      database:
+        condition: service_healthy
     restart: unless-stopped
     logging: *logging
     healthcheck:
@@ -59,6 +80,8 @@ services:
     environment:
       - BACKEND_URL=http://backend:8000  # prepares the digest and briefing after new stories
       - CACHE_DIR=/app/apps/cache
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-newssense}@database:5432/${POSTGRES_DB:-newssense}
+      - PGPASSWORD=${POSTGRES_PASSWORD:-newssense-development-only}
     # The deploy script supplies the host news directory's group so this non-root user can publish.
     group_add:
       - ${NEWS_DATA_GID:-1000}
@@ -66,9 +89,13 @@ services:
       - ${NEWS_DATA_DIR:-./static}:/app/apps/static  # the only service that writes the news
       - cache:/app/apps/cache  # persistent usage and budget shared with the admin dashboard
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+      database:
+        condition: service_healthy
     restart: unless-stopped
     logging: *logging
 
 volumes:
   cache:
+  postgres_data:
