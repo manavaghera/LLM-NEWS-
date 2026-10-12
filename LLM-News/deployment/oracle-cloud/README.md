@@ -34,7 +34,8 @@ sudo ./bootstrap.sh https://github.com/manavaghera/LLM-NEWS-.git feature/newssen
 Use `staging` as the third argument on the staging VM.
 
 The script installs Docker, clones the repository, creates an unprivileged `newssense` account and adds a
-nightly local backup. Production backups must later be copied off the VM.
+nightly backup. Generated news is stored outside Git in an environment-specific directory, so a deploy or
+checkout cannot erase it.
 
 ## 3. Add secrets
 
@@ -77,7 +78,30 @@ The command validates Compose configuration, builds all images, starts the hourl
 public HTTPS readiness endpoint does not become healthy. Readiness includes news freshness, so a new empty
 server becomes ready only after its first successful edition is published.
 
-## 5. Optional GitHub deployments
+Production news lives in `/opt/newssense/data/production/static`; staging uses
+`/opt/newssense/data/staging/static`. The Compose backend and frontend mount that directory read-only, while
+only the updater can write it. The deploy script grants the updater the host directory's numeric group, so
+publishing remains non-root even when the host `newssense` account is not UID 1000. On the first upgraded
+deployment, an existing archive under `apps/static` is copied into the new durable directory automatically.
+
+## 5. Verify backups
+
+The nightly job validates article JSON and SQLite integrity before it reports success. Test any pair without
+changing the live site:
+
+```bash
+cd /opt/newssense/repo/LLM-News/apps
+BACKUP_ENCRYPTION_PASSPHRASE='the-backup-secret' sh scripts/verify-backup.sh \
+  /opt/newssense/backups/static-DATE.tar.gz.enc \
+  /opt/newssense/backups/cache-DATE.tar.gz.enc
+```
+
+Copy `deployment/oracle-cloud/backup.env.example` to `/opt/newssense/backup.env`. Put
+`BACKUP_ENCRYPTION_PASSPHRASE`, `BACKUP_S3_URI`, standard `AWS_*` credentials and, for R2,
+`BACKUP_S3_ENDPOINT` in `/opt/newssense/backup.env`. Use quoted shell `KEY=value` lines and keep the file
+owned by `newssense` with mode `0600`. The backup job confirms each remote object exists after upload.
+
+## 6. Optional GitHub deployments
 
 The repository workflow `deploy.yml` can deploy an exact commit manually. Create GitHub environments named
 `staging` and `production`, then add these secrets to each environment:

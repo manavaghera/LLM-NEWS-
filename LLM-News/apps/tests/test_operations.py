@@ -108,8 +108,16 @@ def test_readiness_fails_when_news_is_stale(monkeypatch, static_root):
     status_file.write_text(json.dumps({"date": now.date().isoformat(), "last_update": now.isoformat(),
                                        "next_update": (now + timedelta(hours=1)).isoformat(),
                                        "interval_minutes": 60, "added": 0, "ok": True}))
+    article_dir = static_root / "static" / "articles" / now.date().isoformat()
+    article_dir.mkdir()
+    (article_dir / "group_categories.json").write_text("{}", encoding="utf-8")
     response, body = call_readiness()
-    assert response.status_code == 200 and body["checks"]["news_fresh"] is True
+    assert response.status_code == 503 and body["checks"]["published_news"] is False
+
+    (article_dir / "group_1.json").write_text(json.dumps({"headline": "Ready"}), encoding="utf-8")
+    response, body = call_readiness()
+    assert response.status_code == 200
+    assert body["checks"]["news_fresh"] is True and body["checks"]["published_news"] is True
 
 
 @pytest.mark.parametrize("limit", [0, 100_000])

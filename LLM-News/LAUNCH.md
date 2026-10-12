@@ -2,7 +2,7 @@
 
 ## Environments
 
-Use separate `.env.staging` and `.env.production` files and separate Compose project names. Never copy production API keys into staging. The first free deployment target is documented in [deployment/oracle-cloud/README.md](deployment/oracle-cloud/README.md).
+Use separate `.env.staging` and `.env.production` files, Compose project names and news directories. Never copy production API keys into staging. The deployment scripts store generated data under `/opt/newssense/data/staging/static` and `/opt/newssense/data/production/static`, outside the Git checkout. The first free deployment target is documented in [deployment/oracle-cloud/README.md](deployment/oracle-cloud/README.md).
 
 ```bash
 cd apps
@@ -28,7 +28,7 @@ Set one paid AI provider key, `DOMAIN`, `PUBLIC_BASE_URL`, a random `ADMIN_TOKEN
 
 ## Backups and recovery
 
-Run `apps/scripts/backup.sh` nightly and copy its archives to independent object storage. The script creates transactionally consistent copies of all SQLite databases and verifies both archives. Once per month, restore into a new staging Compose project, run `PRAGMA integrity_check` on every restored database and open several archived editions.
+Run `apps/scripts/backup.sh` nightly. The script creates transactionally consistent copies of all SQLite databases, validates every article, runs `PRAGMA integrity_check`, writes SHA-256 checksums and can upload to S3 or Cloudflare R2. Set `BACKUP_ENCRYPTION_PASSPHRASE` so off-site archives are encrypted, then set `BACKUP_S3_URI` and optionally `BACKUP_S3_ENDPOINT`. Once per month, restore into a new staging Compose project and open several archived editions. `apps/scripts/verify-backup.sh` performs the same non-destructive archive checks manually.
 
 This repository currently uses SQLite databases in the persistent cache volume for reports, generation usage and aggregate analytics. That is safe for one application host with tested backups. A multi-host deployment still requires migrating those stores to PostgreSQL before launch; do not run multiple backend writers against copied cache volumes.
 

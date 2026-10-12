@@ -16,7 +16,7 @@ services:
       # Only nginx can reach the backend, so its X-Forwarded-For header identifies visitors for rate limits
       - TRUST_PROXY_HEADERS=true
     volumes:
-      - ./static:/app/static:ro
+      - ${NEWS_DATA_DIR:-./static}:/app/static:ro
       - cache:/app/cache  # generated translations, digests and audio
     env_file:
       # Set APP_ENV_FILE when staging and production use separate secret files.
@@ -25,7 +25,7 @@ services:
     logging: *logging
     healthcheck:
       # python:3.11-slim has no curl
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health/ready')"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -35,7 +35,7 @@ services:
     ports:
       - "3000:80"
     volumes:
-      - ./static:/usr/share/nginx/static:ro  # nginx serves article images and audio itself
+      - ${NEWS_DATA_DIR:-./static}:/usr/share/nginx/static:ro  # nginx serves article images and audio itself
     depends_on:
       - backend
     restart: unless-stopped
@@ -59,8 +59,11 @@ services:
     environment:
       - BACKEND_URL=http://backend:8000  # prepares the digest and briefing after new stories
       - CACHE_DIR=/app/apps/cache
+    # The deploy script supplies the host news directory's group so this non-root user can publish.
+    group_add:
+      - ${NEWS_DATA_GID:-1000}
     volumes:
-      - ./static:/app/apps/static  # the only service that writes the news
+      - ${NEWS_DATA_DIR:-./static}:/app/apps/static  # the only service that writes the news
       - cache:/app/apps/cache  # persistent usage and budget shared with the admin dashboard
     depends_on:
       - backend

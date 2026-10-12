@@ -31,6 +31,9 @@ if ! id "${DEPLOY_USER}" >/dev/null 2>&1; then
 fi
 usermod -aG docker "${DEPLOY_USER}"
 install -d -o "${DEPLOY_USER}" -g "${DEPLOY_USER}" "${DEPLOY_ROOT}"
+install -d -o "${DEPLOY_USER}" -g "${DEPLOY_USER}" \
+  "${DEPLOY_ROOT}/data" "${DEPLOY_ROOT}/data/${TARGET_ENVIRONMENT}" \
+  "${DEPLOY_ROOT}/data/${TARGET_ENVIRONMENT}/static"
 
 # Reuse the VM creator's authorized SSH keys for the restricted deployment account.
 SOURCE_USER="${SUDO_USER:-root}"
@@ -54,11 +57,14 @@ chmod 0755 "${DEPLOY_ROOT}/repo/LLM-News/deployment/oracle-cloud/deploy.sh"
 ln -sfn "${DEPLOY_ROOT}/repo/LLM-News/deployment/oracle-cloud/deploy.sh" /usr/local/bin/newssense-deploy
 
 cat >/etc/cron.d/newssense-backup <<'CRON'
-17 2 * * * newssense cd /opt/newssense/repo/LLM-News/apps && ./scripts/backup.sh /opt/newssense/backups __TARGET_ENVIRONMENT__ >/tmp/newssense-backup.log 2>&1
+17 2 * * * newssense cd /opt/newssense/repo/LLM-News/apps && BACKUP_ENV_FILE=/opt/newssense/backup.env ./scripts/backup.sh /opt/newssense/backups __TARGET_ENVIRONMENT__ >/tmp/newssense-backup.log 2>&1
 CRON
 sed -i "s/__TARGET_ENVIRONMENT__/${TARGET_ENVIRONMENT}/" /etc/cron.d/newssense-backup
 chmod 0644 /etc/cron.d/newssense-backup
 install -d -o "${DEPLOY_USER}" -g "${DEPLOY_USER}" "${DEPLOY_ROOT}/backups"
+if [[ ! -e "${DEPLOY_ROOT}/backup.env" ]]; then
+  install -m 0600 -o "${DEPLOY_USER}" -g "${DEPLOY_USER}" /dev/null "${DEPLOY_ROOT}/backup.env"
+fi
 
 echo
 echo "Server ready. Next:"

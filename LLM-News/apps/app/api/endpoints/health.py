@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from fastapi import APIRouter, Response, status
@@ -30,9 +31,15 @@ async def liveness():
 @router.get("/ready")
 async def readiness(response: Response):
     update = read_update_status()
+    articles = Path("static/articles")
+    cache_target = settings.CACHE_DIR if settings.CACHE_DIR.exists() else settings.CACHE_DIR.parent
+    published_news = articles.is_dir() and any(
+        path.stem.removeprefix("group_").isdigit() for path in articles.glob("*/group_*.json")
+    )
     checks = {
         "static_directory": Path("static").is_dir(),
-        "cache_writable": settings.CACHE_DIR.exists() or settings.CACHE_DIR.parent.exists(),
+        "cache_writable": cache_target.is_dir() and os.access(cache_target, os.W_OK),
+        "published_news": published_news,
         "news_fresh": not update["stale"],
     }
     production_issues = settings.production_issues() if not settings.DEBUG else []

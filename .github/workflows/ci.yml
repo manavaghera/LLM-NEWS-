@@ -36,10 +36,33 @@ jobs:
       - uses: actions/checkout@v5
       - run: cp LLM-News/.env.example LLM-News/.env
       - run: sed -i 's/^DOMAIN=$/DOMAIN=news.example.com/; s/^STAGING_DOMAIN=$/STAGING_DOMAIN=staging.news.example.com/' LLM-News/.env
-      - run: docker compose --env-file ../.env -f docker-compose.yml -f docker-compose.prod.yml config --quiet
+      - run: NEWS_DATA_DIR=/tmp/newssense-production docker compose --env-file ../.env -f docker-compose.yml -f docker-compose.prod.yml config --format json > /tmp/production.json
         working-directory: LLM-News/apps
-      - run: docker compose -p newssense-staging --env-file ../.env -f docker-compose.yml -f docker-compose.staging.yml config --quiet
+      - run: NEWS_DATA_DIR=/tmp/newssense-staging docker compose -p newssense-staging --env-file ../.env -f docker-compose.yml -f docker-compose.staging.yml config --format json > /tmp/staging.json
         working-directory: LLM-News/apps
+      - name: Verify environment storage isolation
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          for environment in ("production", "staging"):
+              config = json.loads(Path(f"/tmp/{environment}.json").read_text())
+              expected = f"/tmp/newssense-{environment}"
+              targets = {"backend": "/app/static", "frontend": "/usr/share/nginx/static",
+                         "updater": "/app/apps/static"}
+              for service, target in targets.items():
+                  mount = next(volume for volume in config["services"][service]["volumes"]
+                               if volume["target"] == target)
+                  if mount["source"] != expected:
+                      raise SystemExit(f"{service} does not use isolated {environment} news storage")
+                  if service != "updater" and not mount.get("read_only"):
+                      raise SystemExit(f"{service} must mount news storage read-only")
+                  if service == "updater" and mount.get("read_only"):
+                      raise SystemExit("updater must be the sole news writer")
+          PY
+      - name: Validate deployment and backup scripts
+        run: bash -n LLM-News/deployment/oracle-cloud/bootstrap.sh LLM-News/deployment/oracle-cloud/deploy.sh LLM-News/apps/scripts/backup.sh LLM-News/apps/scripts/verify-backup.sh
 
   backend:
     name: Backend API tests
