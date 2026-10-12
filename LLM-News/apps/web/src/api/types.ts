@@ -288,7 +288,13 @@ export interface PipelineUsage {
   monthly_calls: number
   monthly_limit: number
   monthly_remaining: number | null
-  models: { provider: string; model: string; calls: number; failed: number; prompt_tokens: number; completion_tokens: number }[]
+  daily_spent_usd: number
+  daily_spend_limit_usd: number
+  daily_spend_remaining_usd: number | null
+  monthly_spent_usd: number
+  monthly_spend_limit_usd: number
+  monthly_spend_remaining_usd: number | null
+  models: { provider: string; model: string; calls: number; failed: number; prompt_tokens: number; completion_tokens: number; spent_usd: number; unpriced_calls: number }[]
 }
 
 export interface Operations {
@@ -297,6 +303,10 @@ export interface Operations {
   feeds: { publisher: string; url: string; category: string; ok: boolean; items: number; full_text_items: number; error: string | null; last_checked: string }[]
   runs: { started_at: string; finished_at: string | null; date: string; status: string; added: number; held_back: number; error: string | null }[]
   usage: PipelineUsage
+  jobs: {
+    counts: Record<string, number>
+    failed: { id: number; kind: string; attempts: number; finished_at: string | null; last_error: string }[]
+  }
   analytics: {
     days: number
     since: string

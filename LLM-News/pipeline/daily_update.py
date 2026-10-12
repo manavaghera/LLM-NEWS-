@@ -27,6 +27,8 @@ from typing import Tuple
 
 from updates import edition_files, write_status
 from apps.app.core.generation import acquire_update_lease, release_update_lease
+from apps.app.core.object_storage import push as push_object_storage
+from apps.app.core.jobs import enqueue
 
 ROOT = Path(__file__).resolve().parents[1]
 STATIC_DIR = ROOT / "apps" / "static"
@@ -91,12 +93,19 @@ def _run_once_locked(date: str, backend_url: str, email: bool, news_args: list,
     if code != 0:
         print("The news script failed; nothing else was done.")
         return code, added, date
+    try:
+        uploaded = push_object_storage(STATIC_DIR)
+        if uploaded:
+            print(f"  persisted {uploaded} changed files to object storage")
+    except Exception as exc:
+        print(f"Object-storage publication failed: {type(exc).__name__}")
+        return 74, added, date
     if backend_url and added:
-        warm(backend_url, f"/api/digest/daily/{date}")
-        warm(backend_url, f"/api/digest/daily/{date}/audio")
+        enqueue("warm_digest", {"date": date})
+        enqueue("warm_audio", {"date": date})
+        enqueue("deliver_notifications", {"date": date, "event": "edition_updated", "added": added})
     if email:
-        emailer = ROOT / "pipeline" / "email_digest.py"
-        subprocess.run([sys.executable, str(emailer), "--date", date, "--backend-url", backend_url], cwd=ROOT)
+        enqueue("email_digest", {"date": date})
     return 0, added, date
 
 

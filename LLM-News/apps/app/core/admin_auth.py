@@ -5,7 +5,9 @@ import hmac
 import os
 import time
 
-from fastapi import Header, HTTPException, Request
+from fastapi import Depends, Header, HTTPException, Request
+
+from . import admin_accounts
 
 COOKIE_NAME = "news_admin_session"
 SESSION_SECONDS = 8 * 60 * 60
@@ -43,9 +45,24 @@ def valid_session(token: str | None) -> bool:
     return hmac.compare_digest(supplied, expected)
 
 
-def require_admin(request: Request, x_admin_token: str | None = Header(default=None)) -> None:
+def require_admin(request: Request, x_admin_token: str | None = Header(default=None)) -> dict:
     """Accept an HTTP-only session for the browser and the header for maintenance clients."""
+    named = admin_accounts.session_user(request.cookies.get(COOKIE_NAME))
+    if named:
+        return named
     if valid_password(x_admin_token) or valid_session(request.cookies.get(COOKIE_NAME)):
-        return
+        return {"id": None, "username": "legacy-owner", "role": "owner", "mfa_enabled": False}
     # Owner endpoints stay undiscoverable when administration is disabled or authentication fails.
     raise HTTPException(status_code=404, detail="Not found")
+
+
+def require_owner(identity=Depends(require_admin)) -> dict:
+    if identity["role"] != "owner":
+        raise HTTPException(status_code=403, detail="Owner access required")
+    return identity
+
+
+def require_editor(identity=Depends(require_admin)) -> dict:
+    if identity["role"] not in {"owner", "editor"}:
+        raise HTTPException(status_code=403, detail="Editor access required")
+    return identity

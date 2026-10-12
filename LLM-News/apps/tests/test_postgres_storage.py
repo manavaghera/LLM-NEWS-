@@ -17,10 +17,12 @@ pytestmark = pytest.mark.skipif(not os.getenv("TEST_POSTGRES_URL"),
 
 
 ALL_TABLES = (
+    "background_jobs",
+    "admin_sessions", "admin_audit", "admin_users",
     "corrections", "report_resolutions", "report_articles", "reports",
     "analytics_breakdowns", "runtime_requests", "analytics_events",
     "generation_leases", "generation_holds", "generation_runs", "generation_feeds",
-    "generation_calls", "generation_settings", "storage_migrations",
+    "generation_costs", "generation_model_prices", "generation_calls", "generation_settings", "storage_migrations",
 )
 
 
@@ -31,7 +33,7 @@ def clean_postgres(monkeypatch):
     monkeypatch.setenv("PIPELINE_DAILY_CALL_LIMIT", "3")
     monkeypatch.setenv("PIPELINE_MONTHLY_CALL_LIMIT", "30")
     # Initialize every namespace before truncating the shared production database.
-    for namespace in ("generation", "analytics", "reports"):
+    for namespace in ("generation", "analytics", "reports", "admin", "jobs"):
         with connect(namespace):
             pass
     with connect("generation") as database:

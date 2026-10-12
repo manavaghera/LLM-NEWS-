@@ -46,8 +46,23 @@ class Settings:
             issues.append("ALLOWED_ORIGINS must name the public site")
         if cls.ALLOWED_HOSTS == ["*"]:
             issues.append("ALLOWED_HOSTS must name the public host")
-        if len(os.getenv("ADMIN_TOKEN", "")) < 24:
-            issues.append("ADMIN_TOKEN must be at least 24 characters")
+        from .admin_accounts import has_users
+        if not has_users() and len(os.getenv("ADMIN_TOKEN", "")) < 24:
+            issues.append("Create a named administrator or set a 24-character ADMIN_TOKEN")
+        try:
+            if float(os.getenv("AI_DAILY_SPEND_LIMIT_USD", "0")) <= 0:
+                issues.append("AI_DAILY_SPEND_LIMIT_USD must be greater than zero")
+            if float(os.getenv("AI_MONTHLY_SPEND_LIMIT_USD", "0")) <= 0:
+                issues.append("AI_MONTHLY_SPEND_LIMIT_USD must be greater than zero")
+        except ValueError:
+            issues.append("AI spending limits must be valid USD amounts")
+        from .providers import PROVIDERS
+        for provider_id, provider in PROVIDERS.items():
+            if os.getenv(provider.key_env) and (
+                not os.getenv(f"{provider_id}_INPUT_USD_PER_MTOK")
+                or not os.getenv(f"{provider_id}_OUTPUT_USD_PER_MTOK")
+            ):
+                issues.append(f"{provider_id} token prices must be configured")
         if not cls.DATABASE_URL.startswith(("postgresql://", "postgres://")):
             issues.append("DATABASE_URL must use PostgreSQL")
         else:

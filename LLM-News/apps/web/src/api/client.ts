@@ -89,6 +89,9 @@ export const api = {
   corrections: (date: string, groupId: string) =>
     request<{ corrections: Correction[] }>(`/api/reports/corrections/${q(date)}/${q(groupId)}`),
   adminLogin: (token: string) => request<{ status: string; expires_in: number }>('/api/admin/login', { method: 'POST', body: JSON.stringify({ token }) }),
+  adminAccountLogin: (username: string, password: string, otp = '') => request<{ status: string; expires_in: number; user?: { username: string; role: string; mfa_enabled: boolean } }>('/api/admin/login', {
+    method: 'POST', body: JSON.stringify({ username, password, otp }),
+  }),
   adminSession: () => request<{ authenticated: boolean }>('/api/admin/session'),
   adminLogout: () => request<{ status: string }>('/api/admin/logout', { method: 'POST' }),
   analytics: (event: 'page_view' | 'search' | 'article_saved' | 'story_followed' | 'topic_followed' | 'model_compared' | 'category_view' | 'return_visit' | 'onboarding_completed' | 'alert_enabled' | 'digest_opened', detail = '') =>
@@ -96,6 +99,9 @@ export const api = {
   operations: (token = '') => request<Operations>('/api/operations', { headers: adminHeaders(token) }),
   budget: (token: string, dailyCallLimit: number, monthlyCallLimit?: number) => request<PipelineUsage>('/api/operations/budget', {
     method: 'PATCH', headers: adminHeaders(token), body: JSON.stringify({ daily_call_limit: dailyCallLimit, ...(monthlyCallLimit === undefined ? {} : { monthly_call_limit: monthlyCallLimit }) }),
+  }),
+  spendingBudget: (token: string, dailyUsd: number, monthlyUsd: number) => request<PipelineUsage>('/api/operations/spending', {
+    method: 'PATCH', headers: adminHeaders(token), body: JSON.stringify({ daily_usd: dailyUsd, monthly_usd: monthlyUsd }),
   }),
   reports: (token = '') => request<{ reports: ReaderReport[] }>('/api/reports', { headers: adminHeaders(token) }),
   resolveReport: (token: string, id: number, status: ReportStatus, resolution: string) => request<{ report: ReaderReport }>(`/api/reports/${id}`, {

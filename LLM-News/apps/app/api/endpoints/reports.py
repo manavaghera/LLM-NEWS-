@@ -4,7 +4,8 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Path, Request
 from pydantic import BaseModel, Field, field_validator
 from ...core.limits import RateLimiter, client_ip
-from ...core.admin_auth import require_admin
+from ...core.admin_auth import require_admin, require_editor
+from ...core.admin_accounts import audit
 from ...services.news_service import NewsService
 from ...services.report_service import KINDS, ReportService
 
@@ -65,10 +66,12 @@ def list_reports():
         raise HTTPException(status_code=500, detail="Failed to fetch reports")
 
 
-@router.patch("/{report_id}", dependencies=[Depends(require_admin)])
-def resolve_report(request: ResolutionRequest, report_id: int = Path(ge=1)):
+@router.patch("/{report_id}")
+def resolve_report(request: ResolutionRequest, report_id: int = Path(ge=1), identity=Depends(require_editor)):
     try:
-        return {"report": report_service.resolve(report_id, request.status, request.resolution)}
+        result = report_service.resolve(report_id, request.status, request.resolution)
+        audit(identity, "report_updated", f"report={report_id} status={request.status}")
+        return {"report": result}
     except KeyError:
         raise HTTPException(status_code=404, detail="Report not found")
     except Exception:
@@ -76,10 +79,13 @@ def resolve_report(request: ResolutionRequest, report_id: int = Path(ge=1)):
         raise HTTPException(status_code=500, detail="Failed to update report")
 
 
-@router.post("/{report_id}/correction", status_code=201, dependencies=[Depends(require_admin)])
-def publish_correction(request: CorrectionRequest, report_id: int = Path(ge=1)):
+@router.post("/{report_id}/correction", status_code=201)
+def publish_correction(request: CorrectionRequest, report_id: int = Path(ge=1),
+                       identity=Depends(require_editor)):
     try:
-        return {"status": "resolved", "correction": report_service.publish_correction(report_id, request.text)}
+        correction = report_service.publish_correction(report_id, request.text)
+        audit(identity, "correction_published", f"report={report_id}")
+        return {"status": "resolved", "correction": correction}
     except KeyError:
         raise HTTPException(status_code=404, detail="Report not found")
     except ValueError as exc:

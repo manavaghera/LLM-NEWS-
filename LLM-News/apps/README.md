@@ -124,12 +124,25 @@ The script's header has the cron line and how to restore. Copy the backups off t
 
 ## Owner dashboard and corrections
 
-Set a random `ADMIN_TOKEN` of at least 24 characters in `../.env`, restart the backend and open `/admin`.
-The token is exchanged for a signed, HTTP-only, same-site session that expires after eight hours. The
+Create a named administrator after the database starts, then open `/admin`:
+
+```bash
+docker compose exec backend python scripts/admin_account.py create your-name --role owner --with-mfa
+```
+
+The command prompts for a password and prints a TOTP authenticator secret once. Named sessions are stored
+as hashes, use HTTP-only same-site cookies and expire after eight hours. Roles are `owner`, `editor` and
+`viewer`; only owners can change spending controls and editors can publish corrections. Use
+`admin_account.py reset-password your-name` from the trusted server shell to reset a password and revoke
+sessions. `ADMIN_TOKEN` remains available for migration and maintenance clients. The
 dashboard shows update failures, stale news, feed health, held-back drafts, recent runs, aggregate route
 errors and model/token usage. Daily and monthly pipeline limits persist in PostgreSQL in Docker (SQLite
 in local development) and are shared with the updater; 0 disables a limit. Website AI requests retain
 their separate existing limits.
+
+The `worker` service processes digest, audio, email and notification jobs outside web requests. Set
+`JOB_POLL_SECONDS` to tune its polling interval and `NOTIFICATION_DELIVERY_WEBHOOK` to connect a durable
+notification delivery provider. Failed jobs retry automatically and appear in the operations dashboard.
 
 Review reader reports, save private resolutions, dismiss or reopen reports, and publish dated public
 correction notes. Public article pages show correction history without exposing reader messages.

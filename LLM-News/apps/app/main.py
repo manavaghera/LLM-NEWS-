@@ -8,6 +8,7 @@ from pathlib import Path
 from .core.config import settings
 from .core.limits import BudgetExceeded, RateLimited
 from .core import analytics
+from .core.generation import PipelineSpendExceeded
 from .api.api import api_router
 from .api.endpoints import public
 
@@ -72,6 +73,11 @@ async def rate_limited(request: Request, exc: RateLimited):
 
 @app.exception_handler(BudgetExceeded)
 async def budget_exceeded(request: Request, exc: BudgetExceeded):
+    return JSONResponse(status_code=503, content={"detail": str(exc)})
+
+
+@app.exception_handler(PipelineSpendExceeded)
+async def spending_exceeded(request: Request, exc: PipelineSpendExceeded):
     return JSONResponse(status_code=503, content={"detail": str(exc)})
 
 

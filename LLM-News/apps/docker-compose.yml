@@ -42,6 +42,8 @@ services:
     depends_on:
       database:
         condition: service_healthy
+      storage-init:
+        condition: service_completed_successfully
     restart: unless-stopped
     logging: *logging
     healthcheck:
@@ -58,7 +60,8 @@ services:
     volumes:
       - ${NEWS_DATA_DIR:-./static}:/usr/share/nginx/static:ro  # nginx serves article images and audio itself
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     restart: unless-stopped
     logging: *logging
     healthcheck:
@@ -88,6 +91,41 @@ services:
     volumes:
       - ${NEWS_DATA_DIR:-./static}:/app/apps/static  # the only service that writes the news
       - cache:/app/apps/cache  # persistent usage and budget shared with the admin dashboard
+    depends_on:
+      backend:
+        condition: service_healthy
+      database:
+        condition: service_healthy
+    restart: unless-stopped
+    logging: *logging
+
+  # Restores durable editions/media before the read-only frontend and backend mounts start.
+  storage-init:
+    build:
+      context: ..
+      dockerfile: pipeline/Dockerfile
+    env_file:
+      - ${APP_ENV_FILE:-../.env}
+    group_add:
+      - ${NEWS_DATA_GID:-1000}
+    volumes:
+      - ${NEWS_DATA_DIR:-./static}:/app/apps/static
+    command: ["python", "apps/app/core/object_storage.py", "pull", "/app/apps/static"]
+    restart: "no"
+    logging: *logging
+
+  worker:
+    build:
+      context: ..
+      dockerfile: pipeline/Dockerfile
+    profiles: ["updates"]
+    env_file:
+      - ${APP_ENV_FILE:-../.env}
+    environment:
+      - BACKEND_URL=http://backend:8000
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-newssense}@database:5432/${POSTGRES_DB:-newssense}
+      - PGPASSWORD=${POSTGRES_PASSWORD:-newssense-development-only}
+    command: ["python", "pipeline/job_worker.py"]
     depends_on:
       backend:
         condition: service_healthy

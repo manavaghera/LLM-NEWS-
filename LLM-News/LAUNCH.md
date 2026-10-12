@@ -32,6 +32,8 @@ Run `apps/scripts/backup.sh` nightly. It creates a PostgreSQL custom-format dump
 
 Docker deployments use PostgreSQL for reports, corrections, generation usage, aggregate analytics and updater coordination. On its first start, the backend imports missing records from the previous SQLite files in the cache volume before it becomes healthy. Local development without `DATABASE_URL` continues to use SQLite. The import can also be run explicitly with `python apps/scripts/migrate_sqlite_to_postgres.py --cache-dir apps/cache`.
 
+For server-replacement-safe editions and media, configure `OBJECT_STORAGE_BUCKET` plus the access key and secret in each environment. Set `OBJECT_STORAGE_ENDPOINT` for Cloudflare R2 and use a different `OBJECT_STORAGE_PREFIX` for staging and production. The updater uploads changed content before publishing the manifest; `storage-init` verifies and restores that manifest before the backend and frontend start.
+
 ## Launch gates
 
 - CI, dependency scans, bundle budget and browser tests pass.

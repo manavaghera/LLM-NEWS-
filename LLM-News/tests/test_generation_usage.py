@@ -112,3 +112,27 @@ def test_failed_telemetry_does_not_discard_paid_response(monkeypatch):
     monkeypatch.setattr(llm_client, "finish_call", broken_record)
     assert client.generate("prompt", model="writer") is response
     assert generation.usage_summary()["pipeline_calls"] == 1
+
+
+def test_currency_limit_reserves_then_reconciles_actual_token_cost(monkeypatch):
+    monkeypatch.setenv("MOCK_INPUT_USD_PER_MTOK", "1")
+    monkeypatch.setenv("MOCK_OUTPUT_USD_PER_MTOK", "2")
+    monkeypatch.setenv("AI_DAILY_SPEND_LIMIT_USD", "0.02")
+    monkeypatch.setenv("AI_MONTHLY_SPEND_LIMIT_USD", "1")
+    first = generation.start_call("Mock", "writer")  # reserves $0.016
+    generation.finish_call(first, SimpleNamespace(usage=SimpleNamespace(
+        prompt_tokens=1000, completion_tokens=100)))  # reconciles to $0.0012
+    second = generation.start_call("Mock", "writer")
+    with pytest.raises(generation.PipelineSpendExceeded, match="daily"):
+        generation.start_call("Mock", "writer")
+    saved = generation.usage_summary()
+    assert saved["daily_spent_usd"] == 0.0172
+    assert saved["models"][0]["unpriced_calls"] == 0
+    generation.finish_call(second, failed=True)  # no usage keeps the conservative reservation
+
+
+def test_unpriced_calls_are_visible_to_the_owner():
+    generation.start_call("Unknown Provider", "unknown-model")
+    saved = generation.usage_summary()
+    assert saved["models"][0]["unpriced_calls"] == 1
+    assert saved["models"][0]["spent_usd"] == 0
