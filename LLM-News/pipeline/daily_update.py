@@ -23,13 +23,19 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Tuple
 
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    # Running ``python pipeline/daily_update.py`` puts only pipeline/ on sys.path.
+    # Add the repository root so the documented cron/Task Scheduler command can
+    # import the shared application services without requiring PYTHONPATH.
+    sys.path.insert(0, str(ROOT))
+
 from updates import edition_files, write_status
 from apps.app.core.generation import acquire_update_lease, release_update_lease
 from apps.app.core.object_storage import push as push_object_storage
 from apps.app.core.jobs import enqueue
 from apps.app.core.monitoring import alert, configure_logging
 
-ROOT = Path(__file__).resolve().parents[1]
 STATIC_DIR = ROOT / "apps" / "static"
 DEFAULT_BACKEND = os.getenv("BACKEND_URL", "http://127.0.0.1:8000")
 UPDATE_ALREADY_RUNNING = 75

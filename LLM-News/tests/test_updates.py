@@ -1,5 +1,7 @@
 """Hourly updates (no network, no AI). Run from LLM-News: python -m pytest tests"""
 import json
+import os
+import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -11,6 +13,21 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "pipeline"))
 
 import daily_update  # noqa: E402
 from updates import covered_texts, drop_covered_events, write_status  # noqa: E402
+
+
+def test_documented_updater_command_imports_without_pythonpath():
+    root = Path(__file__).resolve().parents[1]
+    environment = dict(os.environ)
+    environment.pop("PYTHONPATH", None)
+    result = subprocess.run(
+        [sys.executable, str(root / "pipeline" / "daily_update.py"), "--help"],
+        cwd=root,
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 def item(title, summary, link="https://example.com/x"):
