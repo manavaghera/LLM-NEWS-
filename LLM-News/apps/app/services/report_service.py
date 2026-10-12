@@ -22,6 +22,11 @@ class ReportService:
     def __init__(self):
         self.news = NewsService()
 
+    @property
+    def path(self):
+        """Return the active SQLite path without caching environment-specific state."""
+        return sqlite_path("reports")
+
     @contextmanager
     def _connect(self):
         with connect("reports") as database:
@@ -30,7 +35,7 @@ class ReportService:
     def _storage_exists(self) -> bool:
         # CACHE_DIR changes between tests and can change between deployment environments.
         # Resolve it when queried instead of caching a path when this service is imported.
-        return using_postgres() or sqlite_path("reports").exists()
+        return using_postgres() or self.path.exists()
 
     def add(self, date: str, group_id: str, kind: str, message: str, article: Dict = None) -> int:
         with self._connect() as db:
