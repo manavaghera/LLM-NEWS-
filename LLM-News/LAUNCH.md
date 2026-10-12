@@ -26,6 +26,8 @@ Set one paid AI provider key, `DOMAIN`, `PUBLIC_BASE_URL`, a random `ADMIN_TOKEN
 4. Back up production, deploy the same image revisions, then check `/api/health/ready` and the home page.
 5. Keep the previous image revision available for rollback.
 
+Every push runs Python tests, frontend unit tests, desktop/mobile Chromium journeys, accessibility smoke checks, bundle limits, Compose validation and deployable image builds in GitHub Actions. After a cloud deploy reaches readiness, `deployment/smoke-test.sh` checks the public pages, feeds and security headers before the release is accepted.
+
 ## Backups and recovery
 
 Run `apps/scripts/backup.sh` nightly. It creates a PostgreSQL custom-format dump plus news and generated-cache archives, validates every article and legacy SQLite file, validates the database dump with `pg_restore`, writes SHA-256 checksums and can upload to S3 or Cloudflare R2. Set `BACKUP_ENCRYPTION_PASSPHRASE` so off-site files are encrypted, then set `BACKUP_S3_URI` and optionally `BACKUP_S3_ENDPOINT`. Once per month, restore into a new staging Compose project and open several archived editions. `apps/scripts/verify-backup.sh` performs the same non-destructive checks manually.

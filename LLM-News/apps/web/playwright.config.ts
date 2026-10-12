@@ -18,7 +18,10 @@ export default defineConfig({
     baseURL: `http://127.0.0.1:${WEB_PORT}`,
     trace: 'retain-on-failure',
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    { name: 'desktop-chromium', use: { ...devices['Desktop Chrome'] } },
+    { name: 'mobile-chromium', testMatch: '**/accessibility.spec.ts', use: { ...devices['Pixel 7'] } },
+  ],
   webServer: [
     {
       command: `${python} -m uvicorn app.main:app --app-dir ../../.. --host 127.0.0.1 --port ${BACKEND_PORT}`,

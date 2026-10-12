@@ -2,8 +2,13 @@ name: CI
 
 on:
   push:
-    branches: [master]
+    branches: [master, main, feature/newssense-rebuild]
   pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -61,8 +66,19 @@ jobs:
                   if service == "updater" and mount.get("read_only"):
                       raise SystemExit("updater must be the sole news writer")
           PY
-      - name: Validate deployment and backup scripts
-        run: bash -n LLM-News/deployment/oracle-cloud/bootstrap.sh LLM-News/deployment/oracle-cloud/deploy.sh LLM-News/apps/scripts/backup.sh LLM-News/apps/scripts/verify-backup.sh
+      - name: Validate deployment, smoke and backup scripts
+        run: bash -n LLM-News/deployment/oracle-cloud/bootstrap.sh LLM-News/deployment/oracle-cloud/deploy.sh LLM-News/deployment/smoke-test.sh LLM-News/apps/scripts/backup.sh LLM-News/apps/scripts/verify-backup.sh
+
+  container-build:
+    name: Build deployable containers
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build backend, frontend, updater and worker images
+        working-directory: LLM-News/apps
+        env:
+          POSTGRES_PASSWORD: ci-only-postgres-password-123456
+        run: docker compose --profile updates build backend frontend updater worker storage-init
 
   backend:
     name: Backend API tests

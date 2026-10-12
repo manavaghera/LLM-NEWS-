@@ -54,6 +54,7 @@ else
 fi
 
 chmod 0755 "${DEPLOY_ROOT}/repo/LLM-News/deployment/oracle-cloud/deploy.sh"
+chmod 0755 "${DEPLOY_ROOT}/repo/LLM-News/deployment/smoke-test.sh"
 ln -sfn "${DEPLOY_ROOT}/repo/LLM-News/deployment/oracle-cloud/deploy.sh" /usr/local/bin/newssense-deploy
 
 cat >/etc/cron.d/newssense-backup <<'CRON'

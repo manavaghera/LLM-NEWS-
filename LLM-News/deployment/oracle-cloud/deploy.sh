@@ -70,6 +70,7 @@ docker compose -p "${PROJECT}" --env-file "${ENV_FILE}" \
 # A first edition can take several minutes; allow 30 minutes before declaring deployment failure.
 for attempt in {1..360}; do
   if curl --fail --silent --show-error "https://${DOMAIN}/api/health/ready" >/dev/null; then
+    "${APP_ROOT}/deployment/smoke-test.sh" "https://${DOMAIN}"
     echo "${ENVIRONMENT} is ready at https://${DOMAIN}"
     exit 0
   fi
