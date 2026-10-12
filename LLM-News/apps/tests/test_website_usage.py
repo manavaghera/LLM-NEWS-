@@ -23,7 +23,8 @@ def test_completion_records_website_tokens_without_using_pipeline_allowance():
     summary = generation.usage_summary()
     assert summary["pipeline_calls"] == 0
     assert summary["models"] == [{"provider": "Fake provider", "model": "fake-model", "calls": 1,
-                                  "failed": 0, "prompt_tokens": 31, "completion_tokens": 13}]
+                                  "failed": 0, "prompt_tokens": 31, "completion_tokens": 13,
+                                  "unpriced_calls": 1, "spent_usd": 0.0}]
 
 
 def test_provider_error_is_recorded_and_preserved():

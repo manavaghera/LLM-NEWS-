@@ -4,4 +4,9 @@
 !requirements/quick_news.txt
 !apps/app/core/providers.py
 !apps/app/core/generation.py
+!apps/app/core/database.py
+!apps/app/core/object_storage.py
+!apps/app/core/jobs.py
+!apps/app/core/monitoring.py
+!apps/app/core/notifications.py
 !pipeline/*.py

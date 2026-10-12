@@ -75,12 +75,13 @@ test('owner dashboard authenticates, changes a budget, resolves reports and publ
   let authenticated = false
   let report = { id: 1, date: DATE, group_id: 'group_1', created_at: `${DATE}T10:00:00Z`, kind: 'wrong_fact', message: 'The duration is incorrect.', status: 'open', resolution: '', resolved_at: null as string | null, original_headline: HAITI, article_matches: true }
   const corrections: { id: number; created_at: string; text: string }[] = []
-  let usage = { date: DATE, month: '2026-01', pipeline_calls: 2, pipeline_limit: 20, remaining: 18, monthly_calls: 8, monthly_limit: 400, monthly_remaining: 392, models: [{ provider: 'Test', model: 'fixture-model', calls: 2, failed: 0, prompt_tokens: 10, completion_tokens: 5 }] }
+  let usage = { date: DATE, month: '2026-01', pipeline_calls: 2, pipeline_limit: 20, remaining: 18, monthly_calls: 8, monthly_limit: 400, monthly_remaining: 392, daily_spent_usd: 0.01, daily_spend_limit_usd: 10, daily_spend_remaining_usd: 9.99, monthly_spent_usd: 0.05, monthly_spend_limit_usd: 100, monthly_spend_remaining_usd: 99.95, models: [{ provider: 'Test', model: 'fixture-model', calls: 2, failed: 0, prompt_tokens: 10, completion_tokens: 5, spent_usd: 0.01, unpriced_calls: 0 }] }
   const operations = () => ({
     update: { date: DATE, last_update: `${DATE}T10:00:00Z`, next_update: null, interval_minutes: null, added: 2, ok: true },
     feeds: [{ publisher: 'Fixture News', url: 'https://example.com/feed', category: 'social', ok: true, items: 2, full_text_items: 1, error: null, last_checked: `${DATE}T10:00:00Z` }],
     runs: [], usage, held_stories: [{ date: DATE, category: 'tech', headline: 'Held fixture story', reason: 'A claim could not be matched to a source.', created_at: `${DATE}T10:00:00Z` }],
     analytics: { days: 30, since: DATE, privacy: 'Aggregate counters only; no visitor identifiers or query text are stored.', events: [], requests: [] },
+    jobs: { counts: {}, failed: [] }, events: [], notifications: { total: 0, active: 0, errors: 0 },
   })
   await page.route('**/api/admin/**', async (route) => {
     if (route.request().url().endsWith('/login')) {

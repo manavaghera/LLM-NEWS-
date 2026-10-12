@@ -41,9 +41,9 @@ jobs:
       - uses: actions/checkout@v5
       - run: cp LLM-News/.env.example LLM-News/.env
       - run: sed -i 's/^DOMAIN=$/DOMAIN=news.example.com/; s/^STAGING_DOMAIN=$/STAGING_DOMAIN=staging.news.example.com/; s/^POSTGRES_PASSWORD=$/POSTGRES_PASSWORD=ci-only-postgres-password-123456/' LLM-News/.env
-      - run: NEWS_DATA_DIR=/tmp/newssense-production docker compose --env-file ../.env -f docker-compose.yml -f docker-compose.prod.yml config --format json > /tmp/production.json
+      - run: NEWS_DATA_DIR=/tmp/newssense-production docker compose --env-file ../.env -f docker-compose.yml -f docker-compose.prod.yml --profile updates config --format json > /tmp/production.json
         working-directory: LLM-News/apps
-      - run: NEWS_DATA_DIR=/tmp/newssense-staging docker compose -p newssense-staging --env-file ../.env -f docker-compose.yml -f docker-compose.staging.yml config --format json > /tmp/staging.json
+      - run: NEWS_DATA_DIR=/tmp/newssense-staging docker compose -p newssense-staging --env-file ../.env -f docker-compose.yml -f docker-compose.staging.yml --profile updates config --format json > /tmp/staging.json
         working-directory: LLM-News/apps
       - name: Verify environment storage isolation
         run: |

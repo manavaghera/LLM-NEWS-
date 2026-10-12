@@ -20,7 +20,6 @@ KINDS = {
 
 class ReportService:
     def __init__(self):
-        self.path = sqlite_path("reports")
         self.news = NewsService()
 
     @contextmanager
@@ -29,7 +28,9 @@ class ReportService:
             yield database
 
     def _storage_exists(self) -> bool:
-        return using_postgres() or self.path.exists()
+        # CACHE_DIR changes between tests and can change between deployment environments.
+        # Resolve it when queried instead of caching a path when this service is imported.
+        return using_postgres() or sqlite_path("reports").exists()
 
     def add(self, date: str, group_id: str, kind: str, message: str, article: Dict = None) -> int:
         with self._connect() as db:
