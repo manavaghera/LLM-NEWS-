@@ -22,7 +22,7 @@ def test_terminal_failure_is_inspectable_without_private_error_text(tmp_path, mo
     monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
     job_id = jobs.enqueue("warm_audio", {"date": "2026-10-12"}, max_attempts=1)
     assert jobs.claim()["id"] == job_id
-    jobs.fail(job_id, RuntimeError("secret provider response"))
+    assert jobs.fail(job_id, RuntimeError("secret provider response")) is True
     saved = jobs.summary()
     assert saved["counts"] == {"failed": 1}
     assert saved["failed"][0]["last_error"] == "RuntimeError"

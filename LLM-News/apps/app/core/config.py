@@ -46,6 +46,18 @@ class Settings:
             issues.append("ALLOWED_ORIGINS must name the public site")
         if cls.ALLOWED_HOSTS == ["*"]:
             issues.append("ALLOWED_HOSTS must name the public host")
+        if len(os.getenv("METRICS_TOKEN", "")) < 24:
+            issues.append("METRICS_TOKEN must contain at least 24 characters")
+        if not os.getenv("ALERT_WEBHOOK_URL", "").startswith("https://"):
+            issues.append("ALERT_WEBHOOK_URL must use https://")
+        if not os.getenv("SENTRY_DSN", "").startswith("https://"):
+            issues.append("SENTRY_DSN must use https://")
+        if not os.getenv("VAPID_PUBLIC_KEY") or not os.getenv("VAPID_PRIVATE_KEY"):
+            issues.append("VAPID Web Push keys must be configured")
+        if not os.getenv("VAPID_SUBJECT", "").startswith(("mailto:", "https://")):
+            issues.append("VAPID_SUBJECT must use mailto: or https://")
+        if not os.getenv("SMTP_HOST") or not os.getenv("SMTP_FROM") or not os.getenv("DIGEST_EMAIL_TO"):
+            issues.append("SMTP_HOST, SMTP_FROM and DIGEST_EMAIL_TO must be configured")
         from .admin_accounts import has_users
         if not has_users() and len(os.getenv("ADMIN_TOKEN", "")) < 24:
             issues.append("Create a named administrator or set a 24-character ADMIN_TOKEN")

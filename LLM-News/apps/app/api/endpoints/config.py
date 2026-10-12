@@ -43,4 +43,5 @@ async def get_config():
         "default_news_date": news_service.get_most_recent_date(),
         "contact_email": contact_email(),
         "contact_address": contact_address(),
+        "vapid_public_key": os.getenv("VAPID_PUBLIC_KEY", "").strip(),
     }

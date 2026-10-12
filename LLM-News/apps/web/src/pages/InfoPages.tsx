@@ -111,6 +111,9 @@ export function PrivacyPage() {
       <Section title="Privacy-safe analytics">
         <p>We count broad actions such as page views, searches, saves and model comparisons, plus route speed and error totals. These counters contain no IP address, cookie identifier, search text, story identifier or user profile. They help us improve the site and spot failures.</p>
       </Section>
+      <Section title="Optional push notifications">
+        <p>If you enable push alerts, the server stores your browser’s push endpoint and encryption keys plus the categories and keywords you follow. It uses them only to deliver matching news while the site is closed. Disable push in the alerts menu to delete that subscription. Your saved articles and reading history are not sent with it.</p>
+      </Section>
       <Section title="Chat questions">
         <p>
           A question you ask is sent, with the day’s stories, to the AI provider this site uses so it can answer. We
@@ -133,7 +136,7 @@ export function PrivacyPage() {
       </Section>
       <Section title="Questions">
         <Contact purpose="privacy questions" />
-        <p className="text-sm text-muted">Last updated 11 October 2026.</p>
+        <p className="text-sm text-muted">Last updated 12 October 2026.</p>
       </Section>
     </InfoPage>
   )

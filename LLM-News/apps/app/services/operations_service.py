@@ -1,5 +1,5 @@
 """Owner-facing update health and generation usage, without model prompts or provider errors."""
-from ..core import analytics, generation, jobs
+from ..core import analytics, generation, jobs, monitoring, notifications
 from .update_status import read_update_status
 
 
@@ -44,7 +44,8 @@ def operations_snapshot() -> dict:
         for saved in generation.held_stories()
     ]
     return {"update": update, "feeds": feeds, "runs": runs, "held_stories": held_stories,
-            "usage": usage_snapshot(), "analytics": analytics.snapshot(), "jobs": jobs.summary()}
+            "usage": usage_snapshot(), "analytics": analytics.snapshot(), "jobs": jobs.summary(),
+            "events": monitoring.recent_events(), "notifications": notifications.summary()}
 
 
 def update_pipeline_budget(daily_call_limit: int, monthly_call_limit: int | None = None) -> dict:

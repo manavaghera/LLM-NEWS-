@@ -3,18 +3,32 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 import logging
+import os
 import time
 from pathlib import Path
 from .core.config import settings
 from .core.limits import BudgetExceeded, RateLimited
 from .core import analytics
+from .core.monitoring import configure_logging, record_event
 from .core.generation import PipelineSpendExceeded
 from .api.api import api_router
 from .api.endpoints import public
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+# Configure structured logs before the application starts serving requests.
+configure_logging()
 logger = logging.getLogger(__name__)
+
+if os.getenv("SENTRY_DSN", "").strip():
+    try:
+        import sentry_sdk
+        sentry_sdk.init(
+            dsn=os.environ["SENTRY_DSN"],
+            environment=os.getenv("APP_ENV", "development"),
+            traces_sample_rate=max(0.0, min(1.0, float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.05")))),
+            send_default_pii=False,
+        )
+    except Exception:
+        logger.exception("Could not initialize exception reporting")
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -49,6 +63,10 @@ async def production_guardrails(request: Request, call_next):
             analytics.record_request(route, request.method, 500, elapsed)
         except Exception:
             logger.exception("Could not record aggregate request metric")
+        try:
+            record_event("backend", "unhandled_request_error", "error", f"{request.method} {route}")
+        except Exception:
+            logger.exception("Could not record operational event")
         raise
     elapsed = round((time.perf_counter() - started) * 1000)
     route = getattr(request.scope.get("route"), "path", "/unmatched")

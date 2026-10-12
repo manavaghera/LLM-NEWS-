@@ -17,8 +17,6 @@ import os
 import subprocess
 import sys
 import time
-import urllib.request
-import json
 import socket
 import uuid
 from datetime import datetime, timedelta
@@ -29,6 +27,7 @@ from updates import edition_files, write_status
 from apps.app.core.generation import acquire_update_lease, release_update_lease
 from apps.app.core.object_storage import push as push_object_storage
 from apps.app.core.jobs import enqueue
+from apps.app.core.monitoring import alert, configure_logging
 
 ROOT = Path(__file__).resolve().parents[1]
 STATIC_DIR = ROOT / "apps" / "static"
@@ -37,17 +36,10 @@ UPDATE_ALREADY_RUNNING = 75
 
 
 def alert_failure(date: str) -> None:
-    """Send a deliberately small failure event to an optional Slack/Discord-compatible webhook."""
-    target = os.getenv("ALERT_WEBHOOK_URL", "").strip()
-    if not target:
-        return
-    body = json.dumps({"text": f"NewsSense updater failed for {date}. The previous edition was preserved."}).encode()
-    try:
-        request = urllib.request.Request(target, data=body, headers={"Content-Type": "application/json"}, method="POST")
-        with urllib.request.urlopen(request, timeout=15) as response:
-            print(f"  sent failure alert (HTTP {response.status})")
-    except Exception as exc:
-        print(f"  could not send failure alert: {type(exc).__name__}")
+    delivered = alert("updater", "update_failed",
+                      f"NewsSense updater failed for {date}. The previous edition was preserved.")
+    if delivered:
+        print("  sent deduplicated failure alert")
 
 
 def warm(backend_url: str, path: str) -> None:
@@ -104,7 +96,7 @@ def _run_once_locked(date: str, backend_url: str, email: bool, news_args: list,
         enqueue("warm_digest", {"date": date})
         enqueue("warm_audio", {"date": date})
         enqueue("deliver_notifications", {"date": date, "event": "edition_updated", "added": added})
-    if email:
+    if email or (before == 0 and os.getenv("EMAIL_DIGEST_ENABLED", "").lower() == "true"):
         enqueue("email_digest", {"date": date})
     return 0, added, date
 
@@ -151,6 +143,7 @@ def task_command(at: str, interval: int = 0) -> str:
 
 
 def main():
+    configure_logging()
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     when = parser.add_mutually_exclusive_group()
     when.add_argument("--every", metavar="HH:MM", help="keep running and refresh every day at this time")

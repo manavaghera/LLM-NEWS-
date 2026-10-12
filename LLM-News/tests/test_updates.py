@@ -101,3 +101,21 @@ def test_scheduled_task_for_hourly_updates():
     command = daily_update.task_command("07:00", interval=60)
     assert "-RepetitionInterval (New-TimeSpan -Minutes 60)" in command
     assert "--interval 60 --once'" in command
+
+
+def test_first_cloud_edition_queues_enabled_email_digest(tmp_path, monkeypatch):
+    monkeypatch.setattr(daily_update, "STATIC_DIR", tmp_path)
+    monkeypatch.setenv("EMAIL_DIGEST_ENABLED", "true")
+    queued = []
+
+    def generate(*_args, **_kwargs):
+        edition = tmp_path / "articles" / "2026-10-12"
+        edition.mkdir(parents=True)
+        (edition / "group_1.json").write_text("{}", encoding="utf-8")
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(daily_update.subprocess, "run", generate)
+    monkeypatch.setattr(daily_update, "push_object_storage", lambda _: 0)
+    monkeypatch.setattr(daily_update, "enqueue", lambda kind, payload: queued.append((kind, payload)))
+    assert daily_update._run_once_locked("2026-10-12", "", False, []) == (0, 1, "2026-10-12")
+    assert queued == [("email_digest", {"date": "2026-10-12"})]

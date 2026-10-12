@@ -307,6 +307,8 @@ export interface Operations {
     counts: Record<string, number>
     failed: { id: number; kind: string; attempts: number; finished_at: string | null; last_error: string }[]
   }
+  events: { created_at: string; severity: 'info' | 'warning' | 'error' | 'critical'; component: string; event: string; detail: string }[]
+  notifications: { total: number; active: number; errors: number }
   analytics: {
     days: number
     since: string
@@ -333,4 +335,5 @@ export interface UpdateStatus {
 export interface SiteConfig {
   contact_email: string
   contact_address: string
+  vapid_public_key: string
 }

@@ -1,11 +1,14 @@
 import os
+import secrets
 from pathlib import Path
 
-from fastapi import APIRouter, Response, status
+from fastapi import APIRouter, Header, HTTPException, Response, status
+from fastapi.responses import PlainTextResponse
 from ...services.llm_service import LLMService
 from ...services.update_status import read_update_status
 from ...core.config import settings
 from ...core.database import database_ready
+from ...core import analytics, jobs
 
 router = APIRouter()
 
@@ -50,3 +53,30 @@ async def readiness(response: Response):
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
     return {"status": "ready" if ready else "not_ready", "checks": checks,
             "configuration_issues": production_issues, "update": update}
+
+
+@router.get("/metrics", response_class=PlainTextResponse)
+def metrics(authorization: str | None = Header(default=None)):
+    """Prometheus text metrics protected by a dedicated bearer token."""
+    token = os.getenv("METRICS_TOKEN", "")
+    supplied = authorization or ""
+    if len(token) < 24 or not secrets.compare_digest(supplied, f"Bearer {token}"):
+        raise HTTPException(status_code=404, detail="Not found")
+    snapshot = analytics.snapshot(1)
+    job_counts = jobs.summary()["counts"]
+    lines = [
+        "# HELP newssense_http_requests_total API requests recorded today.",
+        "# TYPE newssense_http_requests_total counter",
+    ]
+    for row in snapshot["requests"]:
+        labels = f'method="{row["method"]}",route="{row["route"]}",status="{row["status_group"]}"'
+        lines.append(f"newssense_http_requests_total{{{labels}}} {row['count']}")
+        lines.append(f"newssense_http_request_max_milliseconds{{{labels}}} {row['max_ms']}")
+    lines += [
+        "# HELP newssense_background_jobs Jobs by current state.",
+        "# TYPE newssense_background_jobs gauge",
+    ]
+    for name, count in sorted(job_counts.items()):
+        lines.append(f'newssense_background_jobs{{status="{name}"}} {count}')
+    lines.append("")
+    return "\n".join(lines)

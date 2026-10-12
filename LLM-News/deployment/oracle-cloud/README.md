@@ -64,6 +64,16 @@ OBJECT_STORAGE_REGION=auto
 OBJECT_STORAGE_ENDPOINT=https://ACCOUNT_ID.r2.cloudflarestorage.com
 OBJECT_STORAGE_ACCESS_KEY_ID=replace-me
 OBJECT_STORAGE_SECRET_ACCESS_KEY=replace-me
+METRICS_TOKEN=replace-with-another-long-random-value
+ALERT_WEBHOOK_URL=https://hooks.example.com/replace-me
+SENTRY_DSN=https://replace-me@sentry.example/1
+VAPID_PUBLIC_KEY=replace-me
+VAPID_PRIVATE_KEY=replace-me
+VAPID_SUBJECT=mailto:admin@example.com
+SMTP_HOST=smtp.example.com
+SMTP_FROM=news@example.com
+DIGEST_EMAIL_TO=reader@example.com
+EMAIL_DIGEST_ENABLED=true
 ```
 
 Use `STAGING_DOMAIN` instead of `DOMAIN` in staging. Keep these files readable only by the deployment

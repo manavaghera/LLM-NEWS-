@@ -125,7 +125,17 @@ export function OperationsPanel({ data, token, onBudget }: { data: Operations; t
       <section aria-labelledby="background-jobs" className="space-y-3 rounded-2xl border border-rule bg-surface p-5">
         <h2 id="background-jobs" className="text-lg font-semibold">Background jobs</h2>
         <p className="text-sm text-muted">{Object.entries(data.jobs.counts).map(([name, count]) => `${name}: ${count}`).join(' · ') || 'No jobs recorded.'}</p>
+        <p className="text-sm text-muted">Web Push: {data.notifications.active} active · {data.notifications.errors} with delivery errors · {data.notifications.total} total</p>
         {!!data.jobs.failed.length && <ul className="divide-y divide-rule rounded-xl border border-rule">{data.jobs.failed.map((job) => <li key={job.id} className="p-3 text-sm"><span className="font-medium">{job.kind}</span> · {job.attempts} attempts · {job.last_error}</li>)}</ul>}
+      </section>
+      <section aria-labelledby="operational-events" className="space-y-3 rounded-2xl border border-rule bg-surface p-5">
+        <h2 id="operational-events" className="text-lg font-semibold">Operational events</h2>
+        {!data.events.length ? <p className="text-sm text-muted">No failures or warnings recorded.</p> : <ul className="divide-y divide-rule">
+          {data.events.slice(0, 20).map((event, index) => <li key={`${event.created_at}/${event.event}/${index}`} className="py-3 text-sm">
+            <p><span className={event.severity === 'info' ? 'text-muted' : 'text-negative'}>{event.severity.toUpperCase()}</span> · <span className="font-medium">{event.component}</span> · {event.event.replaceAll('_', ' ')}</p>
+            <p className="text-xs text-faint">{timestamp(event.created_at)}{event.detail ? ` · ${event.detail}` : ''}</p>
+          </li>)}
+        </ul>}
       </section>
       <section aria-labelledby="pipeline-runs" className="space-y-3">
         <h2 id="pipeline-runs" className="text-lg font-semibold">Recent runs</h2>

@@ -62,11 +62,11 @@ def complete(job_id: int) -> None:
         )
 
 
-def fail(job_id: int, error: str) -> None:
+def fail(job_id: int, error: str) -> bool:
     with connect("jobs") as database:
         row = database.execute("SELECT attempts,max_attempts FROM background_jobs WHERE id=?", (job_id,)).fetchone()
         if not row:
-            return
+            return False
         terminal = int(row["attempts"]) >= int(row["max_attempts"])
         delay = min(3600, 30 * 2 ** max(0, int(row["attempts"]) - 1))
         run_after = (_now() + timedelta(seconds=delay)).isoformat(timespec="seconds")
@@ -76,6 +76,7 @@ def fail(job_id: int, error: str) -> None:
              _now().isoformat(timespec="seconds") if terminal else None,
              type(error).__name__ if isinstance(error, BaseException) else str(error)[:120], job_id),
         )
+        return terminal
 
 
 def summary() -> dict:

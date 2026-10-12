@@ -62,7 +62,7 @@ def test_operations_returns_health_and_usage_without_sensitive_details(telemetry
     response = client.get("/api/operations", headers=ADMIN)
     assert response.status_code == 200
     saved = response.json()
-    assert set(saved) == {"update", "feeds", "runs", "held_stories", "usage", "analytics", "jobs"}
+    assert set(saved) == {"update", "feeds", "runs", "held_stories", "usage", "analytics", "jobs", "events", "notifications"}
     assert "visitor identifiers" in saved["analytics"]["privacy"]
     assert saved["update"]["ok"] is False
     assert saved["feeds"][0]["error"] == "Feed fetch failed."

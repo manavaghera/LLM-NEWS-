@@ -15,6 +15,8 @@ COPY apps/app/core/generation.py apps/app/core/generation.py
 COPY apps/app/core/database.py apps/app/core/database.py
 COPY apps/app/core/object_storage.py apps/app/core/object_storage.py
 COPY apps/app/core/jobs.py apps/app/core/jobs.py
+COPY apps/app/core/monitoring.py apps/app/core/monitoring.py
+COPY apps/app/core/notifications.py apps/app/core/notifications.py
 COPY pipeline/ pipeline/
 
 # uid 1000 is usually the owner of the apps/static folder it writes into

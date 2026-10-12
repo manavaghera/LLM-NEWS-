@@ -143,6 +143,9 @@ their separate existing limits.
 The `worker` service processes digest, audio, email and notification jobs outside web requests. Set
 `JOB_POLL_SECONDS` to tune its polling interval and `NOTIFICATION_DELIVERY_WEBHOOK` to connect a durable
 notification delivery provider. Failed jobs retry automatically and appear in the operations dashboard.
+With `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` and `VAPID_SUBJECT` configured, readers can opt into topic
+Web Push that works after the site is closed. SMTP settings deliver the daily email digest. The operations
+dashboard reports active push subscriptions and delivery failures without showing endpoints or keys.
 
 Review reader reports, save private resolutions, dismiss or reopen reports, and publish dated public
 correction notes. Public article pages show correction history without exposing reader messages.

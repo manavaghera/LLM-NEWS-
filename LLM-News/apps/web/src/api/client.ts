@@ -83,6 +83,14 @@ export const api = {
   storyUpdates: (date: string, groupId: string) => request<StoryUpdates>(`/api/news/articles/${q(date)}/${q(groupId)}/updates`),
   updateStatus: () => request<UpdateStatus>('/api/news/status'),
   config: () => request<SiteConfig>('/api/config'),
+  pushSubscribe: (subscription: { endpoint: string; keys: { p256dh: string; auth: string } }, categories: string[], keywords: string[], managementToken?: string) =>
+    request<{ status: string; management_token: string }>('/api/notifications/push', {
+      method: 'POST', body: JSON.stringify({ ...subscription, categories, keywords, ...(managementToken ? { management_token: managementToken } : {}) }),
+    }),
+  pushUnsubscribe: (endpoint: string, managementToken: string) =>
+    request<{ status: string }>('/api/notifications/push', {
+      method: 'DELETE', body: JSON.stringify({ endpoint, management_token: managementToken }),
+    }),
   accuracy: (days: number) => request<AccuracyResponse>(`/api/trends/accuracy?days=${days}`),
   report: (report: ReportRequest) =>
     request<{ status: string }>('/api/reports', { method: 'POST', body: JSON.stringify(report) }),
