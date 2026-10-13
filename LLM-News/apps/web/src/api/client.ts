@@ -9,6 +9,7 @@ import type {
   ModelCatalog,
   ModelsResponse,
   NewsItem,
+  NewsUpdateJob,
   Operations,
   PipelineUsage,
   PublisherDiversityResponse,
@@ -105,6 +106,10 @@ export const api = {
   analytics: (event: 'page_view' | 'search' | 'article_saved' | 'story_followed' | 'topic_followed' | 'model_compared' | 'category_view' | 'return_visit' | 'onboarding_completed' | 'alert_enabled' | 'digest_opened', detail = '') =>
     request<{ status: string }>('/api/analytics/event', { method: 'POST', body: JSON.stringify({ event, detail }) }),
   operations: (token = '') => request<Operations>('/api/operations', { headers: adminHeaders(token) }),
+  newsUpdate: (token = '') => request<{ job: NewsUpdateJob | null }>('/api/operations/update', { headers: adminHeaders(token) }),
+  startNewsUpdate: (token = '') => request<{ job: NewsUpdateJob; created: boolean }>('/api/operations/update', {
+    method: 'POST', headers: adminHeaders(token),
+  }),
   budget: (token: string, dailyCallLimit: number, monthlyCallLimit?: number) => request<PipelineUsage>('/api/operations/budget', {
     method: 'PATCH', headers: adminHeaders(token), body: JSON.stringify({ daily_call_limit: dailyCallLimit, ...(monthlyCallLimit === undefined ? {} : { monthly_call_limit: monthlyCallLimit }) }),
   }),

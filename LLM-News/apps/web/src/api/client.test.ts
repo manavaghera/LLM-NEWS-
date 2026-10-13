@@ -23,3 +23,13 @@ it('sends a budget mutation with authentication and a JSON body', async () => {
   expect(options.headers.get('Content-Type')).toBe('application/json')
   expect(JSON.parse(options.body)).toEqual({ daily_call_limit: 12 })
 })
+
+it('starts an authenticated manual news update', async () => {
+  const fetch = vi.fn().mockResolvedValue(new Response('{}'))
+  vi.stubGlobal('fetch', fetch)
+  await api.startNewsUpdate('test-only-token')
+  const [url, options] = fetch.mock.calls[0]
+  expect(url).toBe('/api/operations/update')
+  expect(options.method).toBe('POST')
+  expect(options.headers.get('X-Admin-Token')).toBe('test-only-token')
+})

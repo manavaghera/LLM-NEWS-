@@ -1,11 +1,12 @@
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from .reports import require_admin
 from ...core.admin_auth import require_owner
 from ...core.admin_accounts import audit
+from ...core import jobs
 from ...services.operations_service import (
     operations_snapshot, update_model_price, update_pipeline_budget, update_spending_budget,
 )
@@ -43,6 +44,29 @@ def get_operations():
     except Exception:
         logger.exception("Failed to fetch operations")
         raise HTTPException(status_code=500, detail="Failed to fetch operations")
+
+
+@router.get("/update")
+def get_news_update():
+    """Return the latest owner-triggered update without exposing its job payload."""
+    return {"job": jobs.latest("news_update")}
+
+
+@router.post("/update")
+def start_news_update(response: Response, identity=Depends(require_owner)):
+    """Queue one news update; repeated clicks reuse the active job."""
+    try:
+        job_id, created = jobs.enqueue_unique(
+            "news_update",
+            {"progress": {"phase": "queued", "percent": 0, "estimated_seconds_remaining": None}},
+            max_attempts=1,
+        )
+        audit(identity, "news_update_requested", str(job_id))
+        response.status_code = status.HTTP_202_ACCEPTED
+        return {"job": jobs.latest("news_update"), "created": created}
+    except Exception:
+        logger.exception("Failed to queue news update")
+        raise HTTPException(status_code=500, detail="Failed to queue news update")
 
 
 @router.patch("/budget")

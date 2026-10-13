@@ -45,7 +45,8 @@ def operations_snapshot() -> dict:
     ]
     return {"update": update, "feeds": feeds, "runs": runs, "held_stories": held_stories,
             "usage": usage_snapshot(), "analytics": analytics.snapshot(), "jobs": jobs.summary(),
-            "events": monitoring.recent_events(), "notifications": notifications.summary()}
+            "events": monitoring.recent_events(), "notifications": notifications.summary(),
+            "news_update": jobs.latest("news_update")}
 
 
 def update_pipeline_budget(daily_call_limit: int, monthly_call_limit: int | None = None) -> dict:

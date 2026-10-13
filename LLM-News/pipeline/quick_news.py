@@ -20,8 +20,10 @@ Output (served by the website):
 
 import html
 import json
+import os
 import re
 import sys
+import time
 import urllib.request
 from datetime import datetime
 from pathlib import Path
@@ -43,6 +45,7 @@ from updates import covered_texts, drop_covered_events
 from publishing import EditionWriter
 from news_options import parse_options
 from apps.app.core.generation import finish_run, record_feed, record_hold, start_run
+from apps.app.core import jobs
 
 STATIC_DIR = ROOT_DIR / "apps" / "static"
 ARTICLES_DIR = STATIC_DIR / "articles"
@@ -51,6 +54,37 @@ AUDIO_DIR = STATIC_DIR / "audio"
 
 USER_AGENT = "Mozilla/5.0 (LLM-NewsHub quick_news)"
 MAX_STORY_ITEMS = 4
+
+
+def report_job_progress(phase: str, *, completed: int | None = None, total: int | None = None,
+                        category: str | None = None, started: float | None = None) -> None:
+    """Report owner-dashboard progress when this process was started by the worker."""
+    raw_job_id = os.getenv("NEWS_UPDATE_JOB_ID", "").strip()
+    if not raw_job_id:
+        return
+    try:
+        job_id = int(raw_job_id)
+    except ValueError:
+        return
+    progress = {"phase": phase, "updated_at": datetime.now().astimezone().isoformat(timespec="seconds")}
+    if category is not None:
+        progress["category"] = category
+    if completed is not None and total:
+        elapsed = max(0.0, time.monotonic() - started) if started is not None else 0.0
+        default_seconds = max(30, int(os.getenv("UPDATE_ESTIMATE_SECONDS_PER_CATEGORY", "480")))
+        seconds_each = elapsed / completed if completed and elapsed else default_seconds
+        progress.update({
+            "completed_categories": completed,
+            "total_categories": total,
+            "percent": min(95, 5 + round(88 * completed / total)),
+            "estimated_seconds_remaining": round(max(0, total - completed) * seconds_each),
+        })
+    try:
+        jobs.update_progress(job_id, progress)
+    except Exception:
+        # Progress is informational; a brief operations-database problem must not
+        # discard an otherwise publishable edition.
+        print("  dashboard progress is temporarily unavailable")
 
 
 class FeedItems(list):
@@ -461,6 +495,9 @@ def generate_edition(args, chosen, edition):
     failed_categories = []
     attempted_feeds = successful_feeds = 0
 
+    progress_started = time.monotonic()
+    total_categories = len(chosen)
+    report_job_progress("fetching", completed=0, total=total_categories, started=progress_started)
     print(f"Date: {args.date} | LLM: {LLM_PUBLISHER} / {LLM_MODEL}")
     scorer = ReliabilityScorer(ROOT_DIR)
     print(scorer.status())
@@ -474,7 +511,9 @@ def generate_edition(args, chosen, edition):
     if seen_links:
         print(f"Skipping {len(seen_links)} links already used by earlier articles")
 
-    for category in chosen:
+    for category_index, category in enumerate(chosen):
+        report_job_progress("generating", completed=category_index, total=total_categories,
+                            category=category, started=progress_started)
         before_category = written
         print(f"\n[{category}] fetching feeds...")
         items = fetch_items(category, args.per_feed, seen_links, fetcher)
@@ -560,6 +599,8 @@ def generate_edition(args, chosen, edition):
         if args.overwrite and written == before_category:
             failed_categories.append(category)
 
+    report_job_progress("publishing", completed=total_categories, total=total_categories,
+                        category="", started=progress_started)
     if attempted_feeds and not successful_feeds:
         sys.exit("News generation failed: every configured feed failed; the published edition was preserved.")
     if failed_categories:

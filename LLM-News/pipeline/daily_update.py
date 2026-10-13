@@ -18,6 +18,7 @@ import subprocess
 import sys
 import time
 import socket
+import urllib.request
 import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -33,12 +34,23 @@ if str(ROOT) not in sys.path:
 from updates import edition_files, write_status
 from apps.app.core.generation import acquire_update_lease, release_update_lease
 from apps.app.core.object_storage import push as push_object_storage
-from apps.app.core.jobs import enqueue
+from apps.app.core import jobs
 from apps.app.core.monitoring import alert, configure_logging
 
 STATIC_DIR = ROOT / "apps" / "static"
 DEFAULT_BACKEND = os.getenv("BACKEND_URL", "http://127.0.0.1:8000")
 UPDATE_ALREADY_RUNNING = 75
+enqueue = jobs.enqueue  # stable seam used by tests and small deployments
+
+
+def report_manual_progress(**values) -> None:
+    raw_job_id = os.getenv("NEWS_UPDATE_JOB_ID", "").strip()
+    if not raw_job_id:
+        return
+    try:
+        jobs.update_progress(int(raw_job_id), values)
+    except Exception:
+        return
 
 
 def alert_failure(date: str) -> None:
@@ -114,7 +126,7 @@ def run_every(minutes: int, backend_url: str, news_args: list, once: bool) -> in
         code, added, date = run_once(backend_url, False, news_args, update=True)
         if code == UPDATE_ALREADY_RUNNING:
             if once:
-                return 0
+                return code if os.getenv("NEWS_UPDATE_JOB_ID") else 0
             time.sleep(max(0.0, (started + timedelta(minutes=minutes) - datetime.now()).total_seconds()))
             continue
         # A provider call can take longer than the requested interval. Record when publication
@@ -123,7 +135,11 @@ def run_every(minutes: int, backend_url: str, news_args: list, once: bool) -> in
         status = write_status(STATIC_DIR, date, minutes, added, ok=code == 0, now=completed)
         print(f"  {added} new stories; next update at {status['next_update'][11:16]}")
         if code != 0:
+            report_manual_progress(phase="failed", estimated_seconds_remaining=0)
             alert_failure(date)
+        else:
+            report_manual_progress(phase="completed", percent=100, estimated_seconds_remaining=0,
+                                   category="", updated_at=completed.astimezone().isoformat(timespec="seconds"))
         if once:
             return code
         time.sleep(max(0.0, (completed + timedelta(minutes=minutes) - datetime.now()).total_seconds()))

@@ -1,11 +1,24 @@
-import { useState } from 'react'
+import { RefreshCw } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
 import { api } from '@/api/client'
-import type { Operations, PipelineUsage } from '@/api/types'
+import type { NewsUpdateJob, Operations, PipelineUsage } from '@/api/types'
 import { Button } from '@/components/ui/button'
 
 const timestamp = (value?: string | null) => value ? new Date(value).toLocaleString() : 'Not recorded'
 
-export function OperationsPanel({ data, token, onBudget }: { data: Operations; token: string; onBudget: (usage: PipelineUsage) => void }) {
+const activeUpdate = (job: NewsUpdateJob | null) => job?.status === 'queued' || job?.status === 'running'
+
+const formatRemaining = (seconds: number | null) => {
+  if (seconds === null) return 'Estimating time remaining…'
+  if (seconds <= 0) return 'Finishing the current step…'
+  const minutes = Math.ceil(seconds / 60)
+  if (minutes < 60) return `About ${minutes} min left`
+  const hours = Math.floor(minutes / 60)
+  const rest = minutes % 60
+  return `About ${hours} hr${hours === 1 ? '' : 's'}${rest ? ` ${rest} min` : ''} left`
+}
+
+export function OperationsPanel({ data, token, onBudget, onRefresh }: { data: Operations; token: string; onBudget: (usage: PipelineUsage) => void; onRefresh?: () => void }) {
   const [draftLimit, setLimit] = useState<string | null>(null)
   const [draftMonthlyLimit, setMonthlyLimit] = useState<string | null>(null)
   const [draftDailySpend, setDailySpend] = useState<string | null>(null)
@@ -16,6 +29,54 @@ export function OperationsPanel({ data, token, onBudget }: { data: Operations; t
   const monthlySpend = draftMonthlySpend ?? String(data.usage.monthly_spend_limit_usd)
   const [pending, setPending] = useState(false)
   const [feedback, setFeedback] = useState<{ error: boolean; message: string } | null>(null)
+  const [updateFeedback, setUpdateFeedback] = useState<{ error: boolean; message: string } | null>(null)
+  const [newsJob, setNewsJob] = useState<NewsUpdateJob | null>(data.news_update)
+  const [clock, setClock] = useState(0)
+  const updateActive = activeUpdate(newsJob)
+  // The job is also polled below. This synchronization covers a manual dashboard refresh
+  // and updates started in another administrator session.
+  // oxlint-disable-next-line react/set-state-in-effect
+  useEffect(() => { setNewsJob(data.news_update) }, [data.news_update])
+  useEffect(() => {
+    if (!updateActive) return
+    const timer = window.setInterval(() => setClock(Date.now()), 1_000)
+    return () => window.clearInterval(timer)
+  }, [updateActive])
+  useEffect(() => {
+    if (!updateActive) return
+    let cancelled = false
+    const poll = async () => {
+      try {
+        const result = await api.newsUpdate(token)
+        if (cancelled) return
+        setNewsJob(result.job)
+        if (result.job && !activeUpdate(result.job)) onRefresh?.()
+      } catch {
+        // The regular dashboard refresh still reports errors; keep the last visible progress here.
+      }
+    }
+    const timer = window.setInterval(() => { void poll() }, 2_000)
+    return () => { cancelled = true; window.clearInterval(timer) }
+  }, [newsJob?.id, newsJob?.status, onRefresh, token, updateActive])
+  const remaining = useMemo(() => {
+    const progress = newsJob?.progress
+    if (!progress) return null
+    const estimate = progress.estimated_seconds_remaining
+    if (estimate === null || estimate === undefined) return null
+    const updated = progress.updated_at ? new Date(progress.updated_at).getTime() : clock
+    return Math.max(0, estimate - Math.max(0, Math.floor((clock - updated) / 1_000)))
+  }, [clock, newsJob])
+  const startUpdate = async () => {
+    setPending(true)
+    setUpdateFeedback(null)
+    try {
+      const result = await api.startNewsUpdate(token)
+      setNewsJob(result.job)
+      setUpdateFeedback({ error: false, message: result.created ? 'News update queued.' : 'The existing news update is still running.' })
+    } catch (error) {
+      setUpdateFeedback({ error: true, message: error instanceof Error ? error.message : 'Could not start the news update.' })
+    } finally { setPending(false) }
+  }
   const save = async () => {
     const value = Number(limit)
     const monthlyValue = Number(monthlyLimit)
@@ -55,12 +116,33 @@ export function OperationsPanel({ data, token, onBudget }: { data: Operations; t
   return (
     <div className="space-y-8">
       <section aria-labelledby="pipeline-health" className="rounded-2xl border border-rule bg-surface p-5">
-        <h2 id="pipeline-health" className="mb-3 text-lg font-semibold">Pipeline health</h2>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <div><h2 id="pipeline-health" className="text-lg font-semibold">Pipeline health</h2><p className="text-sm text-muted">Run the same safe updater used by the hourly schedule.</p></div>
+          <Button variant="primary" onClick={() => { void startUpdate() }} disabled={pending || updateActive}>
+            <RefreshCw className={updateActive ? 'animate-spin' : ''} />
+            {updateActive ? 'Updating news…' : 'Update news now'}
+          </Button>
+        </div>
         <dl className="grid gap-4 text-sm sm:grid-cols-3">
           <div><dt className="text-muted">Latest update</dt><dd>{timestamp(data.update.last_update)}</dd></div>
           <div><dt className="text-muted">Next update</dt><dd>{timestamp(data.update.next_update)}</dd></div>
           <div><dt className="text-muted">Latest update status</dt><dd className={data.update.ok === null ? 'text-muted' : data.update.ok ? 'text-positive' : 'text-negative'}>{data.update.ok === null ? 'Not recorded' : data.update.ok ? 'Healthy' : 'Needs attention'} · {data.update.added} added</dd></div>
         </dl>
+        {newsJob && <div aria-live="polite" className="mt-5 rounded-xl border border-rule bg-paper p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+            <p className="font-medium capitalize">{(newsJob.progress.phase || newsJob.status).replaceAll('_', ' ')}{newsJob.progress.category ? ` · ${newsJob.progress.category.replaceAll('_', ' ')}` : ''}</p>
+            <p className="text-muted">{updateActive ? formatRemaining(remaining) : newsJob.status === 'succeeded' ? 'Update complete' : newsJob.status === 'failed' ? 'Update failed' : newsJob.status}</p>
+          </div>
+          <div className="mt-3 h-3 overflow-hidden rounded-full bg-sunken" role="progressbar" aria-label="News update progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(newsJob.progress.percent ?? 0)}>
+            <div className={`h-full rounded-full bg-accent transition-[width] duration-1000 ease-out ${updateActive ? 'animate-pulse' : ''}`} style={{ width: `${Math.min(100, Math.max(0, newsJob.progress.percent ?? 0))}%` }} />
+          </div>
+          <div className="mt-2 flex flex-wrap justify-between gap-2 text-xs text-faint">
+            <span>{newsJob.progress.completed_categories !== null && newsJob.progress.completed_categories !== undefined && newsJob.progress.total_categories ? `${newsJob.progress.completed_categories} of ${newsJob.progress.total_categories} categories` : `Started ${timestamp(newsJob.created_at)}`}</span>
+            <span>{Math.round(newsJob.progress.percent ?? 0)}%</span>
+          </div>
+          {newsJob.status === 'failed' && <p role="alert" className="mt-3 text-sm text-negative">The update failed. The previous published edition is still available.</p>}
+        </div>}
+        {updateFeedback && <p role={updateFeedback.error ? 'alert' : 'status'} className={`mt-3 text-sm ${updateFeedback.error ? 'text-negative' : 'text-positive'}`}>{updateFeedback.message}</p>}
       </section>
       <section aria-labelledby="pipeline-budget" className="space-y-4 rounded-2xl border border-rule bg-surface p-5">
         <h2 id="pipeline-budget" className="text-lg font-semibold">AI usage & spending protection</h2>

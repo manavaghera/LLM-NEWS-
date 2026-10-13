@@ -83,7 +83,7 @@ export function AdminPage() {
       </form>}
       {error && <p role="alert" className="rounded-xl bg-negative/10 p-4 text-sm text-negative">{error}</p>}
       {signedIn && operations && <>
-        <OperationsPanel data={operations} token="" onBudget={(usage) => setOperations((prev) => prev ? { ...prev, usage } : prev)} />
+        <OperationsPanel data={operations} token="" onBudget={(usage) => setOperations((prev) => prev ? { ...prev, usage } : prev)} onRefresh={() => { void load() }} />
         <ReportsPanel reports={reports} token="" onChange={(report) => setReports((prev) => prev.map((r) => r.id === report.id ? report : r))} />
       </>}
     </div>

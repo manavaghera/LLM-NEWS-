@@ -123,8 +123,15 @@ services:
       - ${APP_ENV_FILE:-../.env}
     environment:
       - BACKEND_URL=http://backend:8000
+      - CACHE_DIR=/app/apps/cache
+      - UPDATE_MINUTES=${UPDATE_MINUTES:-60}
       - DATABASE_URL=postgresql://${POSTGRES_USER:-newssense}@database:5432/${POSTGRES_DB:-newssense}
       - PGPASSWORD=${POSTGRES_PASSWORD:-newssense-development-only}
+    group_add:
+      - ${NEWS_DATA_GID:-1000}
+    volumes:
+      - ${NEWS_DATA_DIR:-./static}:/app/apps/static
+      - cache:/app/apps/cache
     command: ["python", "pipeline/job_worker.py"]
     depends_on:
       backend:

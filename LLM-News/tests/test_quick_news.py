@@ -9,6 +9,22 @@ import media  # noqa: E402
 import quick_news as q  # noqa: E402
 
 
+def test_manual_job_progress_uses_completed_category_speed(monkeypatch):
+    saved = []
+    monkeypatch.setenv("NEWS_UPDATE_JOB_ID", "41")
+    monkeypatch.setattr(q.time, "monotonic", lambda: 120.0)
+    monkeypatch.setattr(q.jobs, "update_progress", lambda job_id, progress: saved.append((job_id, progress)))
+
+    q.report_job_progress("generating", completed=2, total=6, category="ai_models", started=0.0)
+
+    job_id, progress = saved[0]
+    assert job_id == 41
+    assert progress["category"] == "ai_models"
+    assert progress["completed_categories"] == 2 and progress["total_categories"] == 6
+    assert progress["estimated_seconds_remaining"] == 240
+    assert 0 < progress["percent"] < 100
+
+
 def item(title, summary="", publisher="BBCNews", region="uk", image="", n=0):
     return {"publisher": publisher, "region": region, "title": title, "summary": summary,
             "link": f"https://example.com/{publisher}/{n}", "image": image, "published": "2026-09-30"}

@@ -297,12 +297,35 @@ export interface PipelineUsage {
   models: { provider: string; model: string; calls: number; failed: number; prompt_tokens: number; completion_tokens: number; spent_usd: number; unpriced_calls: number }[]
 }
 
+export interface NewsUpdateProgress {
+  phase: 'queued' | 'starting' | 'fetching' | 'generating' | 'publishing' | 'completed' | 'failed' | string
+  category?: string
+  completed_categories?: number | null
+  total_categories?: number
+  percent?: number
+  estimated_seconds_remaining?: number | null
+  updated_at?: string
+}
+
+export interface NewsUpdateJob {
+  id: number
+  kind: 'news_update'
+  status: 'queued' | 'running' | 'succeeded' | 'failed'
+  attempts: number
+  created_at: string
+  locked_at: string | null
+  finished_at: string | null
+  last_error: string
+  progress: NewsUpdateProgress
+}
+
 export interface Operations {
   held_stories?: { date: string; category: string; headline: string; reason: string; created_at: string }[]
   update: UpdateStatus & { ok: boolean | null }
   feeds: { publisher: string; url: string; category: string; ok: boolean; items: number; full_text_items: number; error: string | null; last_checked: string }[]
   runs: { started_at: string; finished_at: string | null; date: string; status: string; added: number; held_back: number; error: string | null }[]
   usage: PipelineUsage
+  news_update: NewsUpdateJob | null
   jobs: {
     counts: Record<string, number>
     failed: { id: number; kind: string; attempts: number; finished_at: string | null; last_error: string }[]

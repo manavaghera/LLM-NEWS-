@@ -51,6 +51,7 @@ def test_operations_requires_owner_authentication(headers, monkeypatch):
     assert client.get("/api/operations", headers=headers).status_code == 404
     assert client.patch("/api/operations/budget", headers=headers,
                         json={"daily_call_limit": 100}).status_code == 404
+    assert client.post("/api/operations/update", headers=headers).status_code == 404
 
 
 def test_operations_hidden_without_configured_token(monkeypatch):
@@ -62,7 +63,7 @@ def test_operations_returns_health_and_usage_without_sensitive_details(telemetry
     response = client.get("/api/operations", headers=ADMIN)
     assert response.status_code == 200
     saved = response.json()
-    assert set(saved) == {"update", "feeds", "runs", "held_stories", "usage", "analytics", "jobs", "events", "notifications"}
+    assert set(saved) == {"update", "feeds", "runs", "held_stories", "usage", "analytics", "jobs", "events", "notifications", "news_update"}
     assert "visitor identifiers" in saved["analytics"]["privacy"]
     assert saved["update"]["ok"] is False
     assert saved["feeds"][0]["error"] == "Feed fetch failed."
@@ -72,6 +73,17 @@ def test_operations_returns_health_and_usage_without_sensitive_details(telemetry
     assert saved["held_stories"][0]["headline"] == "A held-back story"
     assert saved["held_stories"][0]["reason"] == "The headline was unsupported by its sources"
     assert "never-expose-this" not in json.dumps(saved)
+
+
+def test_owner_can_queue_one_news_update(monkeypatch):
+    monkeypatch.setattr(operations.jobs, "enqueue_unique", lambda *args, **kwargs: (42, True))
+    monkeypatch.setattr(operations.jobs, "latest", lambda kind: {
+        "id": 42, "kind": kind, "status": "queued", "progress": {"phase": "queued", "percent": 0},
+    })
+    response = client.post("/api/operations/update", headers=ADMIN)
+    assert response.status_code == 202
+    assert response.json()["created"] is True
+    assert response.json()["job"]["id"] == 42
 
 
 @pytest.mark.parametrize("status,expected", [("success", True), ("failed", False), ("running", None)])
