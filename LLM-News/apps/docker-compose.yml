@@ -71,7 +71,8 @@ services:
       timeout: 10s
       retries: 3
 
-  # New stories every UPDATE_MINUTES (default 60; set it in ../.env). It calls the AI, so it is opt-in:
+  # Fast primary-source briefs every UPDATE_MINUTES (default 60). A separate verifier below performs
+  # the slower AI-written, evidence-checked upgrade once a day. Both use the same publication lease.
   #   docker compose --profile updates up -d --build
   updater:
     build:
@@ -98,6 +99,45 @@ services:
         condition: service_healthy
     restart: unless-stopped
     logging: *logging
+    command:
+      - sh
+      - -c
+      - >-
+        exec python pipeline/daily_update.py --interval "${UPDATE_MINUTES:-60}"
+        --categories "${HOURLY_UPDATE_CATEGORIES:-ai_models}"
+        --per-category "${HOURLY_UPDATE_PER_CATEGORY:-1}"
+        --per-feed "${HOURLY_UPDATE_PER_FEED:-3}"
+        --no-full-text --no-images --no-audio --no-checks --source-briefs
+
+  verifier:
+    build:
+      context: ..
+      dockerfile: pipeline/Dockerfile
+    profiles: ["updates"]
+    env_file:
+      - ${APP_ENV_FILE:-../.env}
+    environment:
+      - BACKEND_URL=http://backend:8000
+      - CACHE_DIR=/app/apps/cache
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-newssense}@database:5432/${POSTGRES_DB:-newssense}
+      - PGPASSWORD=${POSTGRES_PASSWORD:-newssense-development-only}
+    group_add:
+      - ${NEWS_DATA_GID:-1000}
+    volumes:
+      - ${NEWS_DATA_DIR:-./static}:/app/apps/static
+      - cache:/app/apps/cache
+    depends_on:
+      backend:
+        condition: service_healthy
+      database:
+        condition: service_healthy
+    restart: unless-stopped
+    logging: *logging
+    command:
+      - sh
+      - -c
+      - >-
+        exec python pipeline/daily_update.py --every "${FULL_UPDATE_AT:-03:00}" --update --no-audio
 
   # Restores durable editions/media before the read-only frontend and backend mounts start.
   storage-init:

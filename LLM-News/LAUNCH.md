@@ -38,6 +38,8 @@ For server-replacement-safe editions and media, configure `OBJECT_STORAGE_BUCKET
 
 Configure `ALERT_WEBHOOK_URL` for deduplicated updater and background-job failure alerts. Production logs are structured JSON, optional exception traces go to `SENTRY_DSN`, and a Prometheus-compatible endpoint is available at `/api/health/metrics` with `Authorization: Bearer $METRICS_TOKEN`. Keep that endpoint private or allow only the monitoring service to reach it.
 
+The `updates` Compose profile runs two coordinated schedules: a no-AI hourly source-brief updater and a daily full verifier at `FULL_UPDATE_AT`. Keep the rapid categories narrow enough to finish within a few minutes. The full verifier upgrades pending briefs in place and is the only schedule expected to use the generation budget heavily.
+
 For notifications, configure SMTP for the daily digest and generate a VAPID key pair for browser push. The public key is sent to browsers; the private key remains in the backend and worker environment. Readers explicitly enable push, choose topics in their library and can unsubscribe from the alerts menu. Staging and production need different keys so test notifications never reach production readers.
 
 ## Launch gates
