@@ -347,6 +347,33 @@ def write_articles(category: str, items: list, stories: dict, per_category: int)
             print(f"  the AI returned invalid JSON ({e}); retrying once")
 
 
+def source_briefs(items: list, stories: dict, per_category: int) -> list:
+    """Build honest, citation-backed breaking briefs without waiting for an AI provider."""
+    drafts = []
+    for story_id, numbers in list(stories.items())[:per_category]:
+        primary_number = numbers[0]
+        item = items[primary_number - 1]
+        summary = item.get("summary") or item["title"]
+        published = item.get("published") or ""
+        drafts.append({
+            "story_id": story_id,
+            "headline": item["title"],
+            "subheadline": f"Quick source brief from {item['publisher']}; full verification is pending.",
+            "lead": summary,
+            "body": [{
+                "section": "What the source reported",
+                "content": summary,
+                "item_ids": [primary_number],
+                "sentiment": 0,
+            }],
+            "conclusion": "This breaking brief will be expanded by the complete scheduled news update.",
+            "timeline": {published: item["title"]} if published else {},
+            "summary_speech": summary,
+            "_source_brief": True,
+        })
+    return drafts
+
+
 def to_number(value, count: int):
     """A 1-based item number from the LLM, or None if invalid."""
     try:
@@ -533,7 +560,8 @@ def generate_edition(args, chosen, edition):
         multi = sum(len(numbers) > 1 for numbers in stories.values())
         print(f"[{category}] {len(items)} items -> {len(stories)} stories ({multi} with 2+ sources); writing...")
         try:
-            drafts = write_articles(category, items, stories, args.per_category)
+            drafts = (source_briefs(items, stories, args.per_category) if args.source_briefs else
+                      write_articles(category, items, stories, args.per_category))
         except Exception as e:
             print(f"[{category}] LLM step failed: {e}")
             failed_categories.append(category)
@@ -549,6 +577,9 @@ def generate_edition(args, chosen, edition):
             article = build_article(draft, items, set(stories[story_id]), category, args.date)
             if not article:
                 continue
+            if draft.get("_source_brief"):
+                article["generated_by"] = "rapid source brief (no AI synthesis)"
+                article["verification_status"] = "source_brief"
             used_stories.add(story_id)
 
             by_link = {item["link"]: item for item in items}

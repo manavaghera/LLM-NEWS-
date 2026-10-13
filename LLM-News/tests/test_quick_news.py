@@ -25,6 +25,16 @@ def test_manual_job_progress_uses_completed_category_speed(monkeypatch):
     assert 0 < progress["percent"] < 100
 
 
+def test_source_brief_uses_feed_text_without_ai():
+    source = item("OpenAI releases a faster model", "The official feed announced a faster model.",
+                  publisher="OpenAI", region="us", n=7)
+    drafts = q.source_briefs([source], {"S1": [1]}, 1)
+    article = q.build_article(drafts[0], [source], {1}, "ai_models", "2026-10-13")
+    assert article["headline"] == source["title"]
+    assert article["body"][0]["sources"] == [source["link"]]
+    assert "full verification is pending" in article["subheadline"]
+
+
 def item(title, summary="", publisher="BBCNews", region="uk", image="", n=0):
     return {"publisher": publisher, "region": region, "title": title, "summary": summary,
             "link": f"https://example.com/{publisher}/{n}", "image": image, "published": "2026-09-30"}

@@ -36,8 +36,13 @@ def test_manual_update_runs_once_and_keeps_job_alive(monkeypatch):
     job_worker.run_news_update({"id": 17})
 
     assert saved["command"][0] == sys.executable
-    assert saved["command"][-3:] == ["60", "--once", "--no-audio"]
+    assert saved["command"][2:5] == ["--interval", "60", "--once"]
+    assert saved["command"][saved["command"].index("--categories") + 1] == "ai_models"
+    assert "--per-category" in saved["command"] and "--no-checks" in saved["command"]
+    assert "--source-briefs" in saved["command"]
+    assert {"--no-full-text", "--no-images", "--no-audio"} <= set(saved["command"])
     assert saved["environment"]["NEWS_UPDATE_JOB_ID"] == "17"
+    assert saved["environment"]["UPDATE_ESTIMATE_SECONDS_PER_CATEGORY"] == "150"
     assert saved["progress"] == [(17, {"phase": "starting", "percent": 1})]
     assert saved["heartbeats"] == [17]
     assert os.environ.get("NEWS_UPDATE_JOB_ID") is None
