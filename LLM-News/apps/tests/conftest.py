@@ -8,6 +8,19 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 
+@pytest.fixture(autouse=True)
+def fresh_rate_limits(monkeypatch, tmp_path):
+    """Each test starts with fresh visitor counters; limit tests can replace them explicitly."""
+    from app.core import limits
+    from app.api.endpoints import reports
+
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
+    for name in ("ai_rate_limiter", "ai_visitor_daily_limiter"):
+        previous = getattr(limits, name)
+        monkeypatch.setattr(limits, name, limits.RateLimiter(previous.limit, previous.window, previous.reason))
+    monkeypatch.setattr(reports, "report_limiter", limits.RateLimiter(5))
+
+
 @pytest.fixture
 def static_root(tmp_path, monkeypatch):
     """Run a test against an empty static/ folder: the backend resolves static/ from the working directory."""

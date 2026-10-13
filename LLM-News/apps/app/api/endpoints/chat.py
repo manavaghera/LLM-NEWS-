@@ -3,7 +3,8 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from ...core.limits import BudgetExceeded, limit_ai_requests
+from ...core.limits import BudgetExceeded, limit_uncached_ai_requests
+from ...core.generation import PipelineSpendExceeded
 from ...schemas.chat import ChatStreamRequest
 from ...services.chat_service import ChatService
 from ...services.llm_service import AIServiceSlow, LLMService
@@ -17,7 +18,7 @@ llm_service = LLMService()
 news_service = NewsService()
 chat_service = ChatService(llm_service, news_service)
 
-@router.post("/stream", dependencies=[Depends(limit_ai_requests)])
+@router.post("/stream", dependencies=[Depends(limit_uncached_ai_requests)])
 async def chat_stream(request: ChatStreamRequest):
     """Stream a reply as server-sent events: {"type": "meta" | "delta" | "error" | "done", ...}"""
     async def events():
@@ -26,7 +27,7 @@ async def chat_stream(request: ChatStreamRequest):
                 yield f"data: {json.dumps(event)}\n\n"
         except Exception as e:
             logger.error(f"Chat stream failed: {e}")
-            readable = isinstance(e, (BudgetExceeded, AIServiceSlow)) or (
+            readable = isinstance(e, (BudgetExceeded, PipelineSpendExceeded, AIServiceSlow)) or (
                 isinstance(e, RuntimeError) and "No AI provider" in str(e))
             message = str(e) if readable else "The AI service had a problem answering. Please try again."
             yield f"data: {json.dumps({'type': 'error', 'message': message})}\n\n"

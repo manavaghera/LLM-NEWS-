@@ -1,0 +1,69 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Deployment target
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+      commit:
+        description: Full commit SHA that passed CI (defaults to the selected branch commit)
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: Select revision
+        id: revision
+        env:
+          REQUESTED_COMMIT: ${{ inputs.commit }}
+          DEFAULT_COMMIT: ${{ github.sha }}
+        run: |
+          revision="${REQUESTED_COMMIT:-$DEFAULT_COMMIT}"
+          if [[ ! "$revision" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Commit must be a full 40-character Git SHA." >&2
+            exit 1
+          fi
+          echo "sha=$revision" >> "$GITHUB_OUTPUT"
+
+      - name: Configure SSH
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+          if [[ -z "$SSH_HOST" || -z "$SSH_PRIVATE_KEY" || -z "$SSH_KNOWN_HOSTS" ]]; then
+            echo "The selected GitHub environment is missing SSH deployment secrets." >&2
+            exit 1
+          fi
+
+      - name: Deploy exact revision
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          TARGET_ENVIRONMENT: ${{ inputs.environment }}
+          TARGET_COMMIT: ${{ steps.revision.outputs.sha }}
+        run: |
+          ssh -i ~/.ssh/deploy_key "$SSH_USER@$SSH_HOST" \
+            "git -C /opt/newssense/repo fetch origin '$TARGET_COMMIT' && \
+             git -C /opt/newssense/repo checkout --detach '$TARGET_COMMIT' && \
+             newssense-deploy '$TARGET_ENVIRONMENT'"

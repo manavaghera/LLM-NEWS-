@@ -2,13 +2,84 @@ name: CI
 
 on:
   push:
-    branches: [master]
+    branches: [master, main, feature/newssense-rebuild]
   pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
+  dependency-security:
+    name: Dependency security scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - run: pip install pip-audit
+      - run: pip-audit -r LLM-News/apps/requirements.txt
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: LLM-News/apps/web/package-lock.json
+      - run: npm ci
+        working-directory: LLM-News/apps/web
+      - run: npm audit --audit-level=high
+        working-directory: LLM-News/apps/web
+
+  deployment-config:
+    name: Validate deployment configuration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: cp LLM-News/.env.example LLM-News/.env
+      - run: sed -i 's/^DOMAIN=$/DOMAIN=news.example.com/; s/^STAGING_DOMAIN=$/STAGING_DOMAIN=staging.news.example.com/; s/^POSTGRES_PASSWORD=$/POSTGRES_PASSWORD=ci-only-postgres-password-123456/' LLM-News/.env
+      - run: NEWS_DATA_DIR=/tmp/newssense-production docker compose --env-file ../.env -f docker-compose.yml -f docker-compose.prod.yml --profile updates config --format json > /tmp/production.json
+        working-directory: LLM-News/apps
+      - run: NEWS_DATA_DIR=/tmp/newssense-staging docker compose -p newssense-staging --env-file ../.env -f docker-compose.yml -f docker-compose.staging.yml --profile updates config --format json > /tmp/staging.json
+        working-directory: LLM-News/apps
+      - name: Verify environment storage isolation
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          for environment in ("production", "staging"):
+              config = json.loads(Path(f"/tmp/{environment}.json").read_text())
+              expected = f"/tmp/newssense-{environment}"
+              targets = {"backend": "/app/static", "frontend": "/usr/share/nginx/static",
+                         "updater": "/app/apps/static"}
+              for service, target in targets.items():
+                  mount = next(volume for volume in config["services"][service]["volumes"]
+                               if volume["target"] == target)
+                  if mount["source"] != expected:
+                      raise SystemExit(f"{service} does not use isolated {environment} news storage")
+                  if service != "updater" and not mount.get("read_only"):
+                      raise SystemExit(f"{service} must mount news storage read-only")
+                  if service == "updater" and mount.get("read_only"):
+                      raise SystemExit("updater must be the sole news writer")
+          PY
+      - name: Validate deployment, smoke and backup scripts
+        run: bash -n LLM-News/deployment/oracle-cloud/bootstrap.sh LLM-News/deployment/oracle-cloud/deploy.sh LLM-News/deployment/smoke-test.sh LLM-News/apps/scripts/backup.sh LLM-News/apps/scripts/verify-backup.sh
+
+  container-build:
+    name: Build deployable containers
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build backend, frontend, updater and worker images
+        working-directory: LLM-News/apps
+        env:
+          POSTGRES_PASSWORD: ci-only-postgres-password-123456
+        run: docker compose --profile updates build backend frontend updater worker storage-init
+
   backend:
     name: Backend API tests
     runs-on: ubuntu-latest
@@ -24,6 +95,39 @@ jobs:
           cache-dependency-path: LLM-News/apps/requirements*.txt
       - run: pip install -r requirements-dev.txt
       - run: python -m pytest tests -q
+
+  postgres:
+    name: PostgreSQL storage and migration
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: newssense_test
+          POSTGRES_USER: newssense
+          POSTGRES_PASSWORD: postgres-ci-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U newssense -d newssense_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: LLM-News/apps
+    env:
+      TEST_POSTGRES_URL: postgresql://newssense:postgres-ci-password@localhost:5432/newssense_test
+      DATABASE_URL: postgresql://newssense:postgres-ci-password@localhost:5432/newssense_test
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: LLM-News/apps/requirements*.txt
+      - run: pip install -r requirements-dev.txt
+      - run: python -m pytest tests/test_postgres_storage.py -q
 
   news-script:
     name: News script tests

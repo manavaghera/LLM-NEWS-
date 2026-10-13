@@ -115,3 +115,12 @@ test('unknown pages show a friendly not-found page', async ({ page }) => {
   await page.goto('/article/2026-01-02/group_99')
   await expect(page.getByText('Article not found')).toBeVisible()
 })
+
+test('about and privacy pages explain the site', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('link', { name: 'How it works' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'How NewsSense works' })).toBeVisible()
+  await expect(page.getByText(/use the “Report a problem” button/)).toBeVisible() // no CONTACT_EMAIL set
+  await page.getByRole('contentinfo').getByRole('link', { name: 'Privacy' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Your privacy' })).toBeVisible()
+})

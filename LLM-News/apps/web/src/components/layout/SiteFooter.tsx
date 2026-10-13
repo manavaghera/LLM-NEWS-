@@ -19,6 +19,13 @@ export function SiteFooter() {
           <Link className="hover:text-ink" to="/digest">Daily Digest</Link>
           <Link className="hover:text-ink" to="/trends">Trends</Link>
           <Link className="hover:text-ink" to="/saved">Saved</Link>
+          <Link className="hover:text-ink" to="/about">How it works</Link>
+          <Link className="hover:text-ink" to="/privacy">Privacy</Link>
+          <Link className="hover:text-ink" to="/terms">Terms</Link>
+          <Link className="hover:text-ink" to="/cookies">Cookies</Link>
+          <Link className="hover:text-ink" to="/sources">Sources & copyright</Link>
+          <Link className="hover:text-ink" to="/corrections-policy">Corrections</Link>
+          <Link className="hover:text-ink" to="/admin">Owner dashboard</Link>
           {/* A real link: the feed is served by the backend, not the app */}
           <a className="inline-flex items-center gap-1 hover:text-ink" href="/feed.xml">
             <Rss className="size-3.5" aria-hidden /> RSS feed

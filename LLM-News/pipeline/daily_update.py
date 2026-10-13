@@ -17,16 +17,47 @@ import os
 import subprocess
 import sys
 import time
+import socket
 import urllib.request
+import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Tuple
 
-from updates import edition_files, write_status
-
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    # Running ``python pipeline/daily_update.py`` puts only pipeline/ on sys.path.
+    # Add the repository root so the documented cron/Task Scheduler command can
+    # import the shared application services without requiring PYTHONPATH.
+    sys.path.insert(0, str(ROOT))
+
+from updates import edition_files, write_status
+from apps.app.core.generation import acquire_update_lease, release_update_lease
+from apps.app.core.object_storage import push as push_object_storage
+from apps.app.core import jobs
+from apps.app.core.monitoring import alert, configure_logging
+
 STATIC_DIR = ROOT / "apps" / "static"
 DEFAULT_BACKEND = os.getenv("BACKEND_URL", "http://127.0.0.1:8000")
+UPDATE_ALREADY_RUNNING = 75
+enqueue = jobs.enqueue  # stable seam used by tests and small deployments
+
+
+def report_manual_progress(**values) -> None:
+    raw_job_id = os.getenv("NEWS_UPDATE_JOB_ID", "").strip()
+    if not raw_job_id:
+        return
+    try:
+        jobs.update_progress(int(raw_job_id), values)
+    except Exception:
+        return
+
+
+def alert_failure(date: str) -> None:
+    delivered = alert("updater", "update_failed",
+                      f"NewsSense updater failed for {date}. The previous edition was preserved.")
+    if delivered:
+        print("  sent deduplicated failure alert")
 
 
 def warm(backend_url: str, path: str) -> None:
@@ -41,6 +72,27 @@ def warm(backend_url: str, path: str) -> None:
 def run_once(backend_url: str, email: bool, news_args: list, update: bool = False) -> Tuple[int, int, str]:
     """Write the news; with update, add to today's edition when it exists. Returns (exit code, new articles, date)."""
     date = datetime.now().strftime("%Y-%m-%d")
+    owner = f"{socket.gethostname()}:{os.getpid()}:{uuid.uuid4().hex}"
+    try:
+        ttl = max(60, min(86_400, int(os.getenv("UPDATE_LOCK_SECONDS", "7200"))))
+    except ValueError:
+        ttl = 7200
+    if not acquire_update_lease(owner, ttl):
+        print(f"[{datetime.now():%Y-%m-%d %H:%M}] Another updater owns the generation lease; skipping this run")
+        return UPDATE_ALREADY_RUNNING, 0, date
+    try:
+        return _run_once_locked(date, backend_url, email, news_args, update)
+    finally:
+        try:
+            release_update_lease(owner)
+        except Exception as exc:
+            # The lease expires by itself. Do not turn a successfully published edition into a failed run
+            # merely because operational storage was briefly unavailable during cleanup.
+            print(f"  could not release updater lease immediately: {type(exc).__name__}")
+
+
+def _run_once_locked(date: str, backend_url: str, email: bool, news_args: list,
+                     update: bool = False) -> Tuple[int, int, str]:
     edition = STATIC_DIR / "articles" / date
     before = len(edition_files(edition))
     mode = ["--update"] if update and before else []
@@ -51,25 +103,46 @@ def run_once(backend_url: str, email: bool, news_args: list, update: bool = Fals
     if code != 0:
         print("The news script failed; nothing else was done.")
         return code, added, date
+    try:
+        uploaded = push_object_storage(STATIC_DIR)
+        if uploaded:
+            print(f"  persisted {uploaded} changed files to object storage")
+    except Exception as exc:
+        print(f"Object-storage publication failed: {type(exc).__name__}")
+        return 74, added, date
     if backend_url and added:
-        warm(backend_url, f"/api/digest/daily/{date}")
-        warm(backend_url, f"/api/digest/daily/{date}/audio")
-    if email:
-        emailer = ROOT / "pipeline" / "email_digest.py"
-        subprocess.run([sys.executable, str(emailer), "--date", date, "--backend-url", backend_url], cwd=ROOT)
+        enqueue("warm_digest", {"date": date})
+        enqueue("warm_audio", {"date": date})
+        enqueue("deliver_notifications", {"date": date, "event": "edition_updated", "added": added})
+    if email or (before == 0 and os.getenv("EMAIL_DIGEST_ENABLED", "").lower() == "true"):
+        enqueue("email_digest", {"date": date})
     return 0, added, date
 
 
 def run_every(minutes: int, backend_url: str, news_args: list, once: bool) -> int:
-    """Update now and then every `minutes` (counted from each start), recording each run for the website"""
+    """Update now, then wait `minutes` after completion before starting the next run."""
     while True:
         started = datetime.now()
         code, added, date = run_once(backend_url, False, news_args, update=True)
-        status = write_status(STATIC_DIR, date, minutes, added, ok=code == 0, now=started)
+        if code == UPDATE_ALREADY_RUNNING:
+            if once:
+                return code if os.getenv("NEWS_UPDATE_JOB_ID") else 0
+            time.sleep(max(0.0, (started + timedelta(minutes=minutes) - datetime.now()).total_seconds()))
+            continue
+        # A provider call can take longer than the requested interval. Record when publication
+        # actually completed so a successful long run does not immediately look overdue.
+        completed = datetime.now()
+        status = write_status(STATIC_DIR, date, minutes, added, ok=code == 0, now=completed)
         print(f"  {added} new stories; next update at {status['next_update'][11:16]}")
+        if code != 0:
+            report_manual_progress(phase="failed", estimated_seconds_remaining=0)
+            alert_failure(date)
+        else:
+            report_manual_progress(phase="completed", percent=100, estimated_seconds_remaining=0,
+                                   category="", updated_at=completed.astimezone().isoformat(timespec="seconds"))
         if once:
             return code
-        time.sleep(max(0.0, (started + timedelta(minutes=minutes) - datetime.now()).total_seconds()))
+        time.sleep(max(0.0, (completed + timedelta(minutes=minutes) - datetime.now()).total_seconds()))
 
 
 def seconds_until(hh_mm: str) -> float:
@@ -95,6 +168,7 @@ def task_command(at: str, interval: int = 0) -> str:
 
 
 def main():
+    configure_logging()
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     when = parser.add_mutually_exclusive_group()
     when.add_argument("--every", metavar="HH:MM", help="keep running and refresh every day at this time")

@@ -1,5 +1,12 @@
 # Same stack as docker-compose.yml, but using images pushed to Alibaba Cloud Container Registry
 # (see Makefile: make build-push). The backend is only reachable through the frontend's nginx.
+# Docker's default logs grow without limit: keep at most 3 files of 10 MB per service
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   backend:
     image: ${ALIYUN_REGISTRY:-registry.example.com}/${ALIYUN_NAMESPACE:-llm-newshub}/${ALIYUN_BACKEND_IMAGE:-newsense-backend}:latest
@@ -15,6 +22,7 @@ services:
     env_file:
       - ../.env
     restart: unless-stopped
+    logging: *logging
     healthcheck:
       # python:3.11-slim has no curl
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
@@ -26,9 +34,12 @@ services:
     image: ${ALIYUN_REGISTRY:-registry.example.com}/${ALIYUN_NAMESPACE:-llm-newshub}/${ALIYUN_FRONTEND_IMAGE:-newsense-frontend}:latest
     ports:
       - "3000:80"
+    volumes:
+      - ./static:/usr/share/nginx/static:ro  # nginx serves article images and audio itself
     depends_on:
       - backend
     restart: unless-stopped
+    logging: *logging
     healthcheck:
       # 127.0.0.1, not localhost: in Alpine localhost resolves to IPv6 first and nginx listens on IPv4
       test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:80"]

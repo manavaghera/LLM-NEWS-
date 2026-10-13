@@ -36,7 +36,7 @@ export function useChatSession(scope: ChatScope, editionDate?: string) {
   const [sessions, setSessions] = useState<Record<string, ChatMessage[]>>({})
   const saved = useMemo(() => load(key), [key])
   const messages = sessions[key] ?? saved
-  const controller = useRef<AbortController | null>(null)
+  const controllers = useRef(new Map<string, AbortController>())
   const busy = messages.some((m) => m.status === 'streaming')
 
   const update = useCallback(
@@ -50,12 +50,22 @@ export function useChatSession(scope: ChatScope, editionDate?: string) {
     if (finished.length) storage.set(PREFIX + key, JSON.stringify(finished))
   }, [key, messages])
 
-  const patchLast = (patch: (m: ChatMessage) => Partial<ChatMessage>) =>
-    update((list) => list.map((m, i) => (i === list.length - 1 && m.role === 'assistant' ? { ...m, ...patch(m) } : m)))
+  useEffect(() => {
+    const active = controllers.current
+    return () => {
+      active.forEach((controller) => controller.abort())
+      active.clear()
+    }
+  }, [])
 
   const send = async (text: string, model?: string) => {
     const message = text.trim()
-    if (!message || busy) return
+    if (!message || busy || controllers.current.has(key)) return
+    const controller = new AbortController()
+    controllers.current.set(key, controller)
+    const replyId = newId()
+    const patchReply = (patch: (m: ChatMessage) => Partial<ChatMessage>) =>
+      update((list) => list.map((m) => (m.id === replyId ? { ...m, ...patch(m) } : m)))
     const history: ChatTurn[] = messages
       .filter((m) => m.status === 'done' && m.content)
       .slice(-MAX_HISTORY)
@@ -64,15 +74,14 @@ export function useChatSession(scope: ChatScope, editionDate?: string) {
     update((list) => [
       ...list,
       { id: newId(), role: 'user', content: message, status: 'done' },
-      { id: newId(), role: 'assistant', content: '', status: 'streaming' },
+      { id: replyId, role: 'assistant', content: '', status: 'streaming' },
     ])
 
-    controller.current = new AbortController()
     const onEvent = (event: ChatEvent) => {
-      if (event.type === 'meta') patchLast(() => ({ model: event.model, sources: event.sources ?? [] }))
-      else if (event.type === 'delta') patchLast((m) => ({ content: m.content + event.text }))
-      else if (event.type === 'error') patchLast(() => ({ content: event.message, status: 'error' }))
-      else if (event.type === 'done') patchLast((m) => (m.status === 'streaming' ? { status: 'done' } : {}))
+      if (event.type === 'meta') patchReply(() => ({ model: event.model, sources: event.sources ?? [] }))
+      else if (event.type === 'delta') patchReply((m) => ({ content: m.content + event.text }))
+      else if (event.type === 'error') patchReply(() => ({ content: event.message, status: 'error' }))
+      else if (event.type === 'done') patchReply((m) => (m.status === 'streaming' ? { status: 'done' } : {}))
     }
     try {
       await streamChat(
@@ -85,24 +94,25 @@ export function useChatSession(scope: ChatScope, editionDate?: string) {
             : editionDate ? { currentDate: editionDate } : undefined,
         },
         onEvent,
-        controller.current.signal,
+        controller.signal,
       )
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') {
-        patchLast(() => ({ status: 'stopped' }))
+        patchReply(() => ({ status: 'stopped' }))
       } else {
-        patchLast(() => ({ content: error instanceof Error ? error.message : 'Something went wrong.', status: 'error' }))
+        patchReply(() => ({ content: error instanceof Error ? error.message : 'Something went wrong.', status: 'error' }))
       }
     } finally {
-      controller.current = null
-      patchLast((m) => (m.status === 'streaming' ? { status: 'done' } : {}))
+      if (controllers.current.get(key) === controller) controllers.current.delete(key)
+      patchReply((m) => (m.status === 'streaming' ? { status: 'done' } : {}))
     }
   }
 
-  const stop = () => controller.current?.abort()
+  const stop = () => controllers.current.get(key)?.abort()
 
   const clear = () => {
     stop()
+    controllers.current.delete(key)
     storage.remove(PREFIX + key)
     setSessions((prev) => ({ ...prev, [key]: [] }))
   }

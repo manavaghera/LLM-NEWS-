@@ -8,7 +8,7 @@ Both work only from the items' headlines and summaries, and say so in their outp
 """
 import json
 import re
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional
 
 CITATION = re.compile(r"<a\s[^>]*?href\s*=\s*(['\"])(.*?)\1[^>]*>\s*\[\d+\]\s*</a>", re.IGNORECASE)
 # Possible sentence end: . ! ? (+ closing quotes), any citation links after it, space, then a capital/quote/digit
@@ -35,7 +35,7 @@ def plain(sentence: str) -> str:
     return re.sub(r"\s+", " ", CITATION.sub("", sentence)).strip()
 
 
-def _ask_json(client, model: str, system: str, prompt: str) -> Dict:
+def _ask_json(client, model: str, system: str, prompt: str, validate: Optional[Callable] = None) -> Dict:
     for attempt in (1, 2):  # one retry: smaller/free models sometimes return broken JSON
         response = client.generate(prompt_content=prompt, system_content=system, model=model,
                                    temperature=0, max_tokens=4000, response_format={"type": "json_object"})
@@ -43,9 +43,11 @@ def _ask_json(client, model: str, system: str, prompt: str) -> Dict:
         match = re.search(r"\{.*\}", raw, re.DOTALL)
         try:
             result = json.loads(match.group(0) if match else raw)
-            if isinstance(result, dict):
-                return result
-            raise ValueError("unexpected JSON shape")
+            if not isinstance(result, dict):
+                raise ValueError("unexpected JSON shape")
+            if validate:
+                validate(result)
+            return result
         except ValueError:
             if attempt == 2:
                 raise
@@ -64,21 +66,39 @@ def claim_check(article: Dict, items: List[Dict], client, model: str) -> Dict:
     """Remove sentences the source items don't support. Mutates article; returns the claim_check record."""
     statements: Dict[str, str] = {}
     parts: Dict[str, List[str]] = {}
+    locations: Dict[str, Dict] = {}
 
-    def register(prefix: str, text: str):
+    def register(prefix: str, text: str, field: str, section_index=None):
         sentences = split_sentences(text)
         parts[prefix] = sentences
         for n, sentence in enumerate(sentences, 1):
             if plain(sentence):
                 statements[f"{prefix}.{n}"] = plain(sentence)
+                locations[f"{prefix}.{n}"] = {"field": field}
+                if section_index is not None:
+                    locations[f"{prefix}.{n}"]["section_index"] = section_index
 
-    register("L", article.get("lead", ""))
-    register("C", article.get("conclusion", ""))
+    fields = {"H": "headline", "D": "subheadline", "L": "lead", "C": "conclusion", "A": "summary_speech"}
+    for prefix, field in fields.items():
+        register(prefix, article.get(field, ""), field)
     for i, section in enumerate(article.get("body", []), 1):
-        register(f"S{i}", section.get("content", ""))
+        register(f"SH{i}", section.get("section", ""), "section", i - 1)
+        register(f"S{i}", section.get("content", ""), "body", i - 1)
     timeline = article.get("timeline") or {}
     for i, (day, event) in enumerate(timeline.items(), 1):
         statements[f"T{i}"] = f"On {day}: {event}"
+        locations[f"T{i}"] = {"field": "timeline"}
+
+    def validate(result):
+        unsupported = result.get("unsupported")
+        if not isinstance(unsupported, list):
+            raise ValueError("the fact-check must include an unsupported list")
+        for entry in unsupported:
+            if (not isinstance(entry, dict) or not isinstance(entry.get("id"), str) or entry["id"] not in statements
+                    or not isinstance(entry.get("reason"), str) or not entry["reason"].strip()):
+                raise ValueError("the fact-check returned an invalid statement verdict")
+        if "evidence" in result and not isinstance(result["evidence"], list):
+            raise ValueError("the fact-check evidence must be a list")
 
     result = _ask_json(
         client, model,
@@ -88,26 +108,66 @@ def claim_check(article: Dict, items: List[Dict], client, model: str) -> Dict:
         "A statement is UNSUPPORTED if it contains a fact, number, name, quote, date or cause that the source "
         "items do not contain or imply. Paraphrase and neutral framing are fine.\n"
         'Return {"unsupported": [{"id": "<statement id>", "reason": "<short reason>"}]} '
-        "(an empty list if every statement is supported).",
+        '(an empty list if every statement is supported). Also include "evidence": '
+        '[{"id": "<supported statement id>", "sources": [{"item_id": 1, "quote": "<short exact excerpt>"}]}]. '
+        "For every supported statement provide a short verbatim excerpt from a numbered SOURCE ITEM. "
+        "Do not invent or paraphrase evidence. Headlines, section titles and spoken summaries must also be checked.",
+        validate=validate,
     )
-    flagged = {str(u.get("id")): str(u.get("reason", "")) for u in result.get("unsupported", []) if isinstance(u, dict)}
-    flagged = {sid: reason for sid, reason in flagged.items() if sid in statements}
+    flagged = {u["id"]: u["reason"].strip() for u in result["unsupported"]}
 
     removed = [{"text": statements[sid], "reason": reason} for sid, reason in flagged.items()]
     keep = lambda prefix: "".join(s for n, s in enumerate(parts[prefix], 1) if f"{prefix}.{n}" not in flagged).strip()
-    article["lead"] = keep("L")
-    article["conclusion"] = keep("C")
+    for prefix, field in fields.items():
+        if field in article:
+            article[field] = keep(prefix)
     body = []
+    section_indices = {}
     for i, section in enumerate(article.get("body", []), 1):
         content = keep(f"S{i}")
         if plain(content):
-            body.append({**section, "content": content})
+            section_indices[i - 1] = len(body)
+            body.append({**section, "section": keep(f"SH{i}"), "content": content})
     article["body"] = body
     article["timeline"] = {day: event for i, (day, event) in enumerate(timeline.items(), 1) if f"T{i}" not in flagged}
 
     full = any(it.get("text_basis") == "full article" for it in items)
     return {"checked": True, "statements": len(statements), "removed": removed, "model": model,
-            "basis": "the source articles" if full else "the source headlines and summaries"}
+            "basis": "the source articles" if full else "the source headlines and summaries",
+            "evidence": verified_evidence(result.get("evidence", []), statements, flagged, locations, items, section_indices)}
+
+
+def verified_evidence(entries, statements, flagged, locations, items, section_indices) -> List[Dict]:
+    """Retain brief literal source excerpts, never model-invented evidence or arbitrary URLs."""
+    evidence, seen = [], set()
+    for entry in entries:
+        if not isinstance(entry, dict) or not isinstance(entry.get("id"), str):
+            continue
+        sid = entry["id"]
+        if sid not in statements or sid in flagged or sid in seen:
+            continue
+        location = dict(locations[sid])
+        if "section_index" in location:
+            old_index = location["section_index"]
+            if old_index not in section_indices:
+                continue
+            location["section_index"] = section_indices[old_index]
+        sources = []
+        for source in entry.get("sources", []) if isinstance(entry.get("sources"), list) else []:
+            if not isinstance(source, dict):
+                continue
+            number, quote = source.get("item_id"), source.get("quote")
+            if type(number) is not int or not 1 <= number <= len(items) or not isinstance(quote, str):
+                continue
+            quote = re.sub(r"\s+", " ", quote).strip()
+            item = items[number - 1]
+            text = re.sub(r"\s+", " ", f"{item.get('published') or ''} {item['title']} {item.get('text') or item['summary']}")
+            if 8 <= len(quote) <= 240 and quote in text and item.get("link"):
+                sources.append({"url": item["link"], "publisher": item["publisher"], "quote": quote})
+        if sources:
+            seen.add(sid)
+            evidence.append({"id": sid, "text": statements[sid], **location, "sources": sources})
+    return evidence
 
 
 def compare_coverage(items: List[Dict], client, model: str) -> Optional[Dict]:

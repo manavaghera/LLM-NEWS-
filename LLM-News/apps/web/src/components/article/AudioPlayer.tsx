@@ -9,13 +9,20 @@ const clock = (seconds: number) => {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 }
 
+type AudioPlayerProps = { src: string; lazy?: boolean; label?: string }
+
+/** Reset errors, playback position and metadata whenever the audio source changes. */
+export function AudioPlayer(props: AudioPlayerProps) {
+  return <AudioSource key={`${props.src}/${props.lazy ?? false}`} {...props} />
+}
+
 /**
  * Plays a spoken summary.
  * - Default: loads the file's length up front; renders nothing if the file doesn't exist.
  * - lazy: for audio generated on request (translations, the daily briefing): nothing loads until
  *   play is pressed, a spinner shows while it is being generated, and failures are reported.
  */
-export function AudioPlayer({ src, lazy = false, label = 'Listen' }: { src: string; lazy?: boolean; label?: string }) {
+function AudioSource({ src, lazy = false, label = 'Listen' }: AudioPlayerProps) {
   const audio = useRef<HTMLAudioElement>(null)
   const [status, setStatus] = useState<'loading' | 'ready' | 'missing' | 'failed'>(lazy ? 'ready' : 'loading')
   const [playing, setPlaying] = useState(false)

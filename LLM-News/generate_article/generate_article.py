@@ -160,7 +160,7 @@ def generate_article(date_str: str, model: str):
             print(f"Skipping Group {group_id} - too large (size: {group_size}, max: {MAX_GROUP_SIZE})")
             continue
 
-        output_file_path = Path(f"data/output/article/group_{group_id}.json")
+        output_file_path = Path(f"data/output/article/{date_str}/group_{group_id}.json")
         if output_file_path.exists():
             print(f"Skipping Group {group_id} - output file already exists: {output_file_path}")
             continue

@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
-from ...core.limits import BudgetExceeded, limit_ai_requests
+from ...core.limits import BudgetExceeded, limit_ai_requests, limit_uncached_ai_requests
 from ...services.audio_service import audio_cache, briefing_script, speak
 from ...services.digest_service import DigestService
 from ...services.news_service import NewsService
@@ -60,16 +60,17 @@ async def get_daily_briefing_audio(date: str):
     digest = await run_in_threadpool(daily_digest, date)
     if digest.get("error") or not digest.get("total_articles"):
         raise HTTPException(status_code=404, detail="No briefing is available for this date")
-    path = audio_cache("briefings", f"{date}.mp3")
+    script = briefing_script(digest)
+    path = audio_cache("briefings", f"{date}.mp3", text=script)
     try:
-        await speak(briefing_script(digest), path)
+        await speak(script, path)
     except Exception as e:
         logger.error(f"Briefing audio failed: {e}")
         raise HTTPException(status_code=502, detail="The voice service had a problem. Please try again.")
     return FileResponse(path, media_type="audio/mpeg")
 
 
-@router.post("/category", dependencies=[Depends(limit_ai_requests)])
+@router.post("/category", dependencies=[Depends(limit_uncached_ai_requests)])
 def get_category_digest(request: CategoryDigestRequest):
     """Generate a digest for a specific category on a given date."""
     try:

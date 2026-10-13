@@ -1,5 +1,19 @@
 # Quick Start
 
+## Update the news with one click on Windows
+
+Double-click **`UPDATE_NEWS_NOW.cmd`** in the project folder. It runs one update using the project's
+virtual environment, shows progress, and leaves the current edition untouched if generation fails.
+
+The existing Windows scheduled task continues to run hourly updates automatically. The launcher is for
+an immediate manual update.
+
+When the website, backend and `pipeline/job_worker.py` are running, an owner can also open **Owner
+dashboard → Pipeline health → Update news now**. The dashboard shows the current category, processed
+category count, progress animation and estimated time remaining. Docker's `updates` profile starts the
+worker automatically. Set `MANUAL_UPDATE_AUDIO=true` only when manual updates should also generate
+article audio; it is disabled by default so the refresh finishes sooner.
+
 All scripts should be run from the project root unless a section says otherwise.
 
 ## Quick news (recommended)
@@ -10,6 +24,7 @@ RSS feeds + one AI key; no Reddit keys, datasets or classifiers needed.
 pip install -r requirements/quick_news.txt
 python pipeline/quick_news.py                       # today's news into apps/static/
 python pipeline/quick_news.py --append --categories social   # add one category to today
+python pipeline/quick_news.py --categories ai_models,tech,startups  # choose desks to control cost
 python pipeline/thumbnails.py                       # card thumbnails for older images
 python pipeline/daily_update.py --every 07:00       # refresh every morning (+ digest and briefing)
 python pipeline/daily_update.py --interval 60       # or: new stories every hour, with a countdown on the site

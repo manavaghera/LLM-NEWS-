@@ -18,7 +18,10 @@ export default defineConfig({
     baseURL: `http://127.0.0.1:${WEB_PORT}`,
     trace: 'retain-on-failure',
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    { name: 'desktop-chromium', use: { ...devices['Desktop Chrome'] } },
+    { name: 'mobile-chromium', testMatch: '**/accessibility.spec.ts', use: { ...devices['Pixel 7'] } },
+  ],
   webServer: [
     {
       command: `${python} -m uvicorn app.main:app --app-dir ../../.. --host 127.0.0.1 --port ${BACKEND_PORT}`,
@@ -31,6 +34,7 @@ export default defineConfig({
         // One per provider in app/core/providers.py.
         OPENROUTER_API_KEY: '', OPENAI_API_KEY: '', ALIBABA_LLM_KEY: '', GEMINI_API_KEY: '', PERPLEXITY_API_KEY: '',
         NVIDIA_API_KEY: '',
+        CONTACT_EMAIL: '',
       },
       reuseExistingServer: false,
       timeout: 60_000,
@@ -38,7 +42,7 @@ export default defineConfig({
     {
       command: `npx vite --host 127.0.0.1 --port ${WEB_PORT} --strictPort`,
       url: `http://127.0.0.1:${WEB_PORT}`,
-      env: { BACKEND_URL: `http://127.0.0.1:${BACKEND_PORT}` },
+      env: { BACKEND_URL: `http://127.0.0.1:${BACKEND_PORT}`, VITE_E2E: 'true' },
       reuseExistingServer: false,
       timeout: 60_000,
     },

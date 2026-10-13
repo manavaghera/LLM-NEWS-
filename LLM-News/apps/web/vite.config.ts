@@ -20,7 +20,11 @@ export default defineConfig({
       '/api': backend,
       '/static': backend,
       '/share': backend,
+      '/models': backend,
+      '/widgets': backend,
       '/feed.xml': backend,
+      '/robots.txt': backend,
+      '/sitemap.xml': backend,
     },
   },
   test: {

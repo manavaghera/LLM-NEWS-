@@ -4,6 +4,7 @@ import { ArticlePage } from '@/pages/ArticlePage'
 import { DigestPage } from '@/pages/DigestPage'
 import { NotFoundPage, RouteError } from '@/pages/ErrorPages'
 import { HomePage } from '@/pages/HomePage'
+import { AboutPage, CookiePolicyPage, CorrectionsPolicyPage, PrivacyPage, SourcesPolicyPage, TermsPage } from '@/pages/InfoPages'
 import { SavedPage } from '@/pages/SavedPage'
 import { SearchPage } from '@/pages/SearchPage'
 
@@ -20,6 +21,15 @@ export const router = createBrowserRouter([
       { path: 'digest', element: <DigestPage /> },
       { path: 'search', element: <SearchPage /> },
       { path: 'saved', element: <SavedPage /> },
+      { path: 'ai-models', lazy: () => import('@/pages/AIModelsPage').then((m) => ({ Component: m.AIModelsPage })) },
+      { path: 'ai-models/:modelId', lazy: () => import('@/pages/ModelDetailPage').then((m) => ({ Component: m.ModelDetailPage })) },
+      { path: 'about', element: <AboutPage /> },
+      { path: 'privacy', element: <PrivacyPage /> },
+      { path: 'terms', element: <TermsPage /> },
+      { path: 'cookies', element: <CookiePolicyPage /> },
+      { path: 'sources', element: <SourcesPolicyPage /> },
+      { path: 'corrections-policy', element: <CorrectionsPolicyPage /> },
+      { path: 'admin', lazy: () => import('@/pages/AdminPage').then((m) => ({ Component: m.AdminPage })) },
       // Loaded on demand: the charting library is most of the bundle
       { path: 'trends', lazy: () => import('@/pages/TrendsPage').then((m) => ({ Component: m.TrendsPage })) },
       { path: '*', element: <NotFoundPage /> },

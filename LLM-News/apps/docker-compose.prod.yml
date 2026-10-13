@@ -2,10 +2,22 @@
 #   docker compose --env-file ../.env -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 # Needs DOMAIN in ../.env, a DNS record pointing DOMAIN at this server, and ports 80 and 443 open.
 services:
+  database:
+    environment:
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in ../.env.production}
+
   backend:
     environment:
+      - APP_ENV=production
       - PROXY_COUNT=2  # visitors reach the backend through Caddy, then nginx
       - PUBLIC_BASE_URL=https://${DOMAIN:?Set DOMAIN in ../.env}
+      - ALLOWED_ORIGINS=https://${DOMAIN:?Set DOMAIN in ../.env}
+      - ALLOWED_HOSTS=${DOMAIN:?Set DOMAIN in ../.env},backend,localhost
+      - PGPASSWORD=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in ../.env.production}
+
+  updater:
+    environment:
+      - PGPASSWORD=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in ../.env.production}
 
   frontend:
     ports: !reset []  # only reachable through Caddy
@@ -27,6 +39,11 @@ services:
     depends_on:
       - frontend
     restart: unless-stopped
+    logging:  # like the other services (docker-compose.yml)
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   caddy_data:

@@ -1,8 +1,18 @@
 import type { ArticleSection } from '@/api/types'
 
 export const CATEGORIES = [
+  { value: 'ai_models', label: 'AI Models', section: 'AI Models', tone: 'text-ai-models', bg: 'bg-ai-models' },
   { value: 'social', label: 'Social', section: 'World & Society', tone: 'text-social', bg: 'bg-social' },
   { value: 'tech', label: 'Technology', section: 'Technology', tone: 'text-tech', bg: 'bg-tech' },
+  { value: 'science', label: 'Science', section: 'Science', tone: 'text-science', bg: 'bg-science' },
+  { value: 'business', label: 'Business', section: 'Business', tone: 'text-business', bg: 'bg-business' },
+  { value: 'startups', label: 'Startups', section: 'Startups & Venture', tone: 'text-startups', bg: 'bg-startups' },
+  { value: 'cybersecurity', label: 'Cybersecurity', section: 'Cybersecurity', tone: 'text-cybersecurity', bg: 'bg-cybersecurity' },
+  { value: 'health', label: 'Health', section: 'Health', tone: 'text-health', bg: 'bg-health' },
+  { value: 'climate', label: 'Climate', section: 'Climate & Energy', tone: 'text-climate', bg: 'bg-climate' },
+  { value: 'space', label: 'Space', section: 'Space', tone: 'text-space', bg: 'bg-space' },
+  { value: 'sports', label: 'Sports', section: 'Sports', tone: 'text-sports', bg: 'bg-sports' },
+  { value: 'gaming', label: 'Gaming', section: 'Gaming', tone: 'text-gaming', bg: 'bg-gaming' },
   { value: 'entertainment', label: 'Entertainment', section: 'Culture & Entertainment', tone: 'text-entertainment', bg: 'bg-entertainment' },
 ] as const
 

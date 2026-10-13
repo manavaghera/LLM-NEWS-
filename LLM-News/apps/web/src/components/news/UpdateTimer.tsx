@@ -10,11 +10,11 @@ export function UpdateTimer({ date }: { date: string }) {
   if (!status?.last_update || (status.date && status.date !== date)) return null
   const updated = new Date(status.last_update).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
   return (
-    <p className="flex items-center gap-1.5 text-sm text-muted">
+    <p className={`flex items-center gap-1.5 text-sm ${status.stale ? 'text-negative' : 'text-muted'}`}>
       <RefreshCw className="size-3.5 shrink-0" aria-hidden />
       <span>
         Updated {updated}
-        {updatesRunning(status, now) && status.next_update && <> · next update {countdown(status.next_update, now)}</>}
+        {status.stale ? ' · update delayed' : updatesRunning(status, now) && status.next_update ? <> · next update {countdown(status.next_update, now)}</> : null}
       </span>
     </p>
   )

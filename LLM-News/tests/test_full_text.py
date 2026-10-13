@@ -2,6 +2,7 @@
 import sys
 from pathlib import Path
 from types import SimpleNamespace
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "pipeline"))
 
@@ -10,6 +11,16 @@ from full_text import FullTextFetcher, shorten  # noqa: E402
 ALLOW = b"User-agent: *\nAllow: /\n"
 DENY = b"User-agent: *\nDisallow: /news/\n"
 PAGE = "<html><body>article</body></html>"
+
+
+@pytest.fixture(autouse=True)
+def publisher_flags(monkeypatch):
+    """Publisher policy decisions are fixture data; these unit tests never fetch live robots.txt."""
+    collection = SimpleNamespace(
+        uk=SimpleNamespace(BBC=SimpleNamespace(disallows_training=True),
+                           TheGuardian=SimpleNamespace(disallows_training=True)),
+        ca=SimpleNamespace(CBCNews=SimpleNamespace(disallows_training=False)))
+    monkeypatch.setitem(sys.modules, "fundus", SimpleNamespace(PublisherCollection=collection))
 
 
 def fake_publisher(body: str):
@@ -26,7 +37,7 @@ def fetcher_with(robots: bytes, body: str = "The vote passed. It was close.", mo
 
 def test_publishers_that_opted_out_are_never_fetched():
     fetcher = FullTextFetcher("test-agent")
-    # Real fundus flags: BBC and The Guardian disallow AI use, CBC does not
+    # Exercise opted-out and allowed fixture publishers without depending on live policy changes.
     assert fetcher.skipped.get("BBCNews") == "opted out of AI use"
     assert fetcher.skipped.get("TheGuardian") == "opted out of AI use"
     assert "CBCNews" in fetcher.allowed

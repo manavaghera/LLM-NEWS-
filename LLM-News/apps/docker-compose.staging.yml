@@ -1,0 +1,46 @@
+# Staging uses the same production images and HTTPS path under a separate Compose project.
+# docker compose -p newssense-staging --env-file ../.env.staging \
+#   -f docker-compose.yml -f docker-compose.staging.yml --profile updates up -d --build
+services:
+  database:
+    environment:
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+
+  backend:
+    environment:
+      - APP_ENV=staging
+      - PROXY_COUNT=2
+      - PUBLIC_BASE_URL=https://${STAGING_DOMAIN:?Set STAGING_DOMAIN}
+      - ALLOWED_ORIGINS=https://${STAGING_DOMAIN:?Set STAGING_DOMAIN}
+      - ALLOWED_HOSTS=${STAGING_DOMAIN:?Set STAGING_DOMAIN},backend,localhost
+      - PGPASSWORD=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+
+  frontend:
+    ports: !reset []
+    expose:
+      - "80"
+
+  updater:
+    environment:
+      - UPDATE_MINUTES=${STAGING_UPDATE_MINUTES:-60}
+      - PGPASSWORD=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      - DOMAIN=${STAGING_DOMAIN:?Set STAGING_DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - staging_caddy_data:/data
+      - staging_caddy_config:/config
+    depends_on:
+      - frontend
+    restart: unless-stopped
+
+volumes:
+  staging_caddy_data:
+  staging_caddy_config:

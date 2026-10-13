@@ -1,3 +1,5 @@
+import os
+import re
 from pathlib import Path
 
 from fastapi import APIRouter
@@ -15,6 +17,16 @@ def latest_summary_date() -> str:
     return with_video[0] if with_video else news_service.get_most_recent_date()
 
 
+def contact_email() -> str:
+    """CONTACT_EMAIL for the About page (corrections and privacy questions), if it looks like an address"""
+    email = os.getenv("CONTACT_EMAIL", "").strip()
+    return email if re.fullmatch(r"[^@\s<>\"]+@[^@\s<>\"]+\.[^@\s<>\"]+", email) else ""
+
+
+def contact_address() -> str:
+    return os.getenv("CONTACT_ADDRESS", "").strip()[:300]
+
+
 @router.get("/summary-date")
 async def get_summary_date():
     """Get the summary video date"""
@@ -29,4 +41,7 @@ async def get_config():
         "version": settings.VERSION,
         "summary_date": latest_summary_date(),
         "default_news_date": news_service.get_most_recent_date(),
+        "contact_email": contact_email(),
+        "contact_address": contact_address(),
+        "vapid_public_key": os.getenv("VAPID_PUBLIC_KEY", "").strip(),
     }

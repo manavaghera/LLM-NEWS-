@@ -53,6 +53,9 @@ describe('format', () => {
   })
   it('handles unknown categories', () => {
     expect(categoryInfo('tech').label).toBe('Technology')
+    expect(categoryInfo('startups').section).toBe('Startups & Venture')
+    expect(categoryInfo('climate').label).toBe('Climate')
+    expect(categoryInfo('space').label).toBe('Space')
     expect(categoryInfo('sport').label).toBe('Sport')
   })
 })

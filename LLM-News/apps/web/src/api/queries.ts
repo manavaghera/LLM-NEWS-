@@ -10,6 +10,9 @@ export const useDates = () => useQuery({ queryKey: ['dates'], queryFn: api.dates
 export const useNews = (date: string | undefined) =>
   useQuery({ queryKey: ['news', date], queryFn: () => api.news(date!), enabled: !!date })
 
+export const useModelCatalog = () =>
+  useQuery({ queryKey: ['model-catalog'], queryFn: api.modelCatalog, staleTime: HOUR })
+
 export const useSearch = (query: string) =>
   useQuery({ queryKey: ['search', query], queryFn: () => api.search(query), enabled: query.trim().length >= 2 })
 
@@ -44,6 +47,8 @@ export const useDigest = (date: string | undefined) =>
 export const useLanguages = () => useQuery({ queryKey: ['languages'], queryFn: api.languages, staleTime: Infinity })
 
 export const useModels = () => useQuery({ queryKey: ['models'], queryFn: api.models, staleTime: HOUR })
+
+export const useSiteConfig = () => useQuery({ queryKey: ['config'], queryFn: api.config, staleTime: HOUR })
 
 export const useTranslate = () =>
   useMutation({

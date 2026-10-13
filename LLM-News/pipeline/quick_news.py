@@ -18,11 +18,12 @@ Output (served by the website):
     apps/static/audio/{date}/group_{n}.mp3
 """
 
-import argparse
 import html
 import json
+import os
 import re
 import sys
+import time
 import urllib.request
 from datetime import datetime
 from pathlib import Path
@@ -41,6 +42,10 @@ from full_text import FullTextFetcher
 from media import best_image, download_image, make_audio, make_thumbnail
 from reliability import ReliabilityScorer
 from updates import covered_texts, drop_covered_events
+from publishing import EditionWriter
+from news_options import parse_options
+from apps.app.core.generation import finish_run, record_feed, record_hold, start_run
+from apps.app.core import jobs
 
 STATIC_DIR = ROOT_DIR / "apps" / "static"
 ARTICLES_DIR = STATIC_DIR / "articles"
@@ -49,6 +54,50 @@ AUDIO_DIR = STATIC_DIR / "audio"
 
 USER_AGENT = "Mozilla/5.0 (LLM-NewsHub quick_news)"
 MAX_STORY_ITEMS = 4
+
+
+def report_job_progress(phase: str, *, completed: int | None = None, total: int | None = None,
+                        category: str | None = None, started: float | None = None) -> None:
+    """Report owner-dashboard progress when this process was started by the worker."""
+    raw_job_id = os.getenv("NEWS_UPDATE_JOB_ID", "").strip()
+    if not raw_job_id:
+        return
+    try:
+        job_id = int(raw_job_id)
+    except ValueError:
+        return
+    progress = {"phase": phase, "updated_at": datetime.now().astimezone().isoformat(timespec="seconds")}
+    if category is not None:
+        progress["category"] = category
+    if completed is not None and total:
+        elapsed = max(0.0, time.monotonic() - started) if started is not None else 0.0
+        default_seconds = max(30, int(os.getenv("UPDATE_ESTIMATE_SECONDS_PER_CATEGORY", "480")))
+        seconds_each = elapsed / completed if completed and elapsed else default_seconds
+        progress.update({
+            "completed_categories": completed,
+            "total_categories": total,
+            "percent": min(95, 5 + round(88 * completed / total)),
+            "estimated_seconds_remaining": round(max(0, total - completed) * seconds_each),
+        })
+    try:
+        jobs.update_progress(job_id, progress)
+    except Exception:
+        # Progress is informational; a brief operations-database problem must not
+        # discard an otherwise publishable edition.
+        print("  dashboard progress is temporarily unavailable")
+
+
+class FeedItems(list):
+    """Feed items plus health data that distinguishes no new stories from a total outage."""
+
+    def __init__(self, values=(), *, attempted_feeds=0, successful_feeds=0):
+        super().__init__(values)
+        self.attempted_feeds = attempted_feeds
+        self.successful_feeds = successful_feeds
+
+    @property
+    def total_outage(self):
+        return self.attempted_feeds > 0 and self.successful_feeds == 0
 
 # category -> [(publisher, region, feed url)]; categories match the website's tabs
 FEEDS = {
@@ -65,6 +114,58 @@ FEEDS = {
         ("ArsTechnica", "us", "https://feeds.arstechnica.com/arstechnica/index"),
         ("TheVerge", "us", "https://www.theverge.com/rss/index.xml"),
     ],
+    "ai_models": [
+        ("OpenAI", "us", "https://openai.com/news/rss.xml"),
+        ("GoogleAI", "us", "https://blog.google/technology/ai/rss/"),
+        ("HuggingFace", "us", "https://huggingface.co/blog/feed.xml"),
+        ("MITTechReview", "us", "https://www.technologyreview.com/topic/artificial-intelligence/feed"),
+        ("TechCrunchAI", "us", "https://techcrunch.com/category/artificial-intelligence/feed/"),
+    ],
+    "science": [
+        ("BBCNews", "uk", "https://feeds.bbci.co.uk/news/science_and_environment/rss.xml"),
+        ("TheGuardian", "uk", "https://www.theguardian.com/science/rss"),
+        ("NPR", "us", "https://feeds.npr.org/1007/rss.xml"),
+    ],
+    "business": [
+        ("BBCNews", "uk", "https://feeds.bbci.co.uk/news/business/rss.xml"),
+        ("TheGuardian", "uk", "https://www.theguardian.com/business/rss"),
+        ("NPR", "us", "https://feeds.npr.org/1006/rss.xml"),
+    ],
+    "startups": [
+        ("TechCrunch", "us", "https://techcrunch.com/category/startups/feed/"),
+        ("CrunchbaseNews", "us", "https://news.crunchbase.com/feed/"),
+        ("Sifted", "uk", "https://sifted.eu/feed"),
+    ],
+    "cybersecurity": [
+        ("TheHackerNews", "us", "https://feeds.feedburner.com/TheHackersNews"),
+        ("BleepingComputer", "us", "https://www.bleepingcomputer.com/feed/"),
+        ("KrebsOnSecurity", "us", "https://krebsonsecurity.com/feed/"),
+    ],
+    "health": [
+        ("BBCNews", "uk", "https://feeds.bbci.co.uk/news/health/rss.xml"),
+        ("TheGuardian", "uk", "https://www.theguardian.com/society/health/rss"),
+        ("NPR", "us", "https://feeds.npr.org/1128/rss.xml"),
+    ],
+    "climate": [
+        ("CarbonBrief", "uk", "https://www.carbonbrief.org/feed/"),
+        ("InsideClimateNews", "us", "https://insideclimatenews.org/feed/"),
+        ("TheGuardian", "uk", "https://www.theguardian.com/environment/climate-crisis/rss"),
+    ],
+    "space": [
+        ("NASA", "us", "https://www.nasa.gov/news-release/feed/"),
+        ("Space.com", "us", "https://www.space.com/feeds/all"),
+        ("SpaceNews", "us", "https://spacenews.com/feed/"),
+    ],
+    "sports": [
+        ("BBCSport", "uk", "https://feeds.bbci.co.uk/sport/rss.xml?edition=uk"),
+        ("TheGuardian", "uk", "https://www.theguardian.com/sport/rss"),
+        ("NPR", "us", "https://feeds.npr.org/1055/rss.xml"),
+    ],
+    "gaming": [
+        ("Polygon", "us", "https://www.polygon.com/rss/index.xml"),
+        ("PCGamer", "uk", "https://www.pcgamer.com/rss/"),
+        ("GameSpot", "us", "https://www.gamespot.com/feeds/mashup/"),
+    ],
     "entertainment": [
         ("BBCNews", "uk", "https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml"),
         ("TheGuardian", "uk", "https://www.theguardian.com/culture/rss"),
@@ -77,9 +178,23 @@ SYSTEM_PROMPT = (
     "and always reply with valid JSON."
 )
 
+
+def category_guidance(category: str) -> str:
+    if category != "ai_models":
+        return ""
+    return (
+        "AI MODELS DESK RULES: Prefer model launches, API changes, pricing, context-window changes, "
+        "benchmarks, open-weight releases and well-sourced reports about unreleased models. Ignore generic AI "
+        "product stories. Treat leaks, rumours and preview claims as unconfirmed: prefix the headline with "
+        "'Report:' and clearly attribute the claim. Never turn a report into a confirmed launch. Include prices, "
+        "token limits and benchmark numbers only when a numbered source item states them."
+    )
+
 PROMPT_TEMPLATE = """Below are {story_count} recent {category} news stories. Each story groups feed items that cover the same event; items are numbered [1]..[{item_count}].
 
 {stories}
+
+{category_guidance}
 
 Pick the {per_category} most newsworthy stories (prefer stories reported by several publishers). Write one news article per story, using ONLY the items inside that story.
 
@@ -116,14 +231,19 @@ def clean_text(raw: str, limit: int = 500) -> str:
 def fetch_items(category: str, per_feed: int, seen_links: set, fetcher=None) -> list:
     """Newest items from each feed of a category, skipping links in seen_links (and adding new ones)."""
     items = []
+    attempted_feeds = successful_feeds = 0
     for publisher, region, url in FEEDS[category]:
+        attempted_feeds += 1
         try:
             request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
             with urllib.request.urlopen(request, timeout=20) as response:
                 feed = feedparser.parse(response.read())
         except Exception as e:
             print(f"  {publisher}: skipped ({e})")
+            record_feed(publisher, url, category, False)
             continue
+
+        successful_feeds += 1
 
         added = 0
         for entry in feed.entries[:per_feed]:
@@ -147,8 +267,9 @@ def fetch_items(category: str, per_feed: int, seen_links: set, fetcher=None) -> 
             items[-1].update(text=full or items[-1]["summary"], text_basis="full article" if full else "summary")
             added += 1
         full_count = sum(1 for item in items if item["publisher"] == publisher and item["text_basis"] == "full article")
+        record_feed(publisher, url, category, True, added, full_count)
         print(f"  {publisher}: {added} items" + (f" ({full_count} with full text)" if full_count else ""))
-    return items
+    return FeedItems(items, attempted_feeds=attempted_feeds, successful_feeds=successful_feeds)
 
 
 def previously_covered_links(date: str, include_date: bool = False) -> set:
@@ -205,6 +326,7 @@ def write_articles(category: str, items: list, stories: dict, per_category: int)
     prompt = PROMPT_TEMPLATE.format(
         story_count=len(stories), category=category, item_count=len(items),
         stories="\n\n".join(blocks), per_category=per_category,
+        category_guidance=category_guidance(category),
     )
     for attempt in (1, 2):  # smaller/free models sometimes return broken JSON; one retry usually fixes it
         response = default_client.generate(
@@ -281,9 +403,16 @@ def build_article(draft: dict, items: list, allowed: set, category: str, date: s
     if not body or not draft.get("headline"):
         return None
     timeline = draft.get("timeline")
+    headline = str(draft["headline"]).strip()
+    if category == "ai_models":
+        source_titles = " ".join(items[n - 1].get("title", "") for n in allowed)
+        is_unconfirmed = re.search(r"\b(leaks?|rumou?rs?|reportedly|sources say|could launch|may launch)\b",
+                                   source_titles, re.IGNORECASE)
+        if is_unconfirmed and not re.match(r"^(report|rumou?r|leak)\s*:", headline, re.IGNORECASE):
+            headline = f"Report: {headline}"
     return {
         "category": category,
-        "headline": draft["headline"],
+        "headline": headline,
         "subheadline": draft.get("subheadline", ""),
         "lead": draft.get("lead", ""),
         "body": body,
@@ -296,6 +425,18 @@ def build_article(draft: dict, items: list, allowed: set, category: str, date: s
 
 # Kept with each article for transparency (the full text itself is never stored)
 SOURCE_FIELDS = ("publisher", "region", "title", "summary", "link", "published", "text_basis")
+
+
+def held_back(article: dict) -> str:
+    """Why an article that went through the checks must not be published ("" when it can be). Unchecked
+    AI text never goes live; its links stay unused, so the next update can write and check it again."""
+    if article.get("claim_check", {}).get("checked") is not True:
+        return "held back (the fact-check failed; the next update can retry it)"
+    if not article.get("headline", "").strip():
+        return "held back (the headline was unsupported by its sources)"
+    if not article["body"]:
+        return "dropped (no sentence was supported by its sources)"
+    return ""
 
 
 def enrich(article: dict, cited: list) -> list:
@@ -321,54 +462,42 @@ def main():
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(errors="replace")
 
-    parser = argparse.ArgumentParser(description="Build website articles from RSS feeds with one LLM.")
-    parser.add_argument("--date", default=datetime.now().strftime("%Y-%m-%d"))
-    parser.add_argument("--per-category", type=int, help="articles per category (default 3; 2 per --update)")
-    parser.add_argument("--per-feed", type=int, default=6, help="newest items read from each feed (default 6)")
-    parser.add_argument("--similarity", type=float, default=0.2,
-                        help="how similar items must be to count as one story, 0-1 (default 0.2)")
-    parser.add_argument("--no-images", action="store_true", help="don't download article images")
-    parser.add_argument("--no-audio", action="store_true", help="don't generate audio summaries")
-    parser.add_argument("--no-full-text", action="store_true", help="only use RSS summaries, never fetch articles")
-    parser.add_argument("--no-checks", action="store_true",
-                        help="skip the claim check and coverage comparison (2 fewer AI calls per article)")
-    parser.add_argument("--overwrite", action="store_true", help="replace articles already made for this date")
-    parser.add_argument("--append", action="store_true", help="add to this date's articles instead of replacing them")
-    parser.add_argument("--update", action="store_true",
-                        help="hourly update: append only stories about events this date's articles don't cover yet")
-    parser.add_argument("--categories", default=",".join(FEEDS),
-                        help=f"comma-separated categories to write (default: {','.join(FEEDS)})")
-    args = parser.parse_args()
-    args.append = args.append or args.update
-
-    try:
-        datetime.strptime(args.date, "%Y-%m-%d")
-    except ValueError:
-        sys.exit(f"Invalid --date '{args.date}', expected YYYY-MM-DD")
-
-    chosen = [c.strip() for c in args.categories.split(",") if c.strip()]
-    unknown = [c for c in chosen if c not in FEEDS]
-    if unknown or not chosen:
-        sys.exit(f"Unknown category {unknown}; choose from {', '.join(FEEDS)}")
-
+    args = parse_options(FEEDS)
     out_dir = ARTICLES_DIR / args.date
-    categories_file = out_dir / "group_categories.json"
-    categories = {}
     if any(out_dir.glob("group_*.json")) and not (args.overwrite or args.append):
         sys.exit(f"{out_dir} already has articles. Use --append to add to them or --overwrite to replace them.")
+    run_id = start_run(args.date)
+    written, held = 0, 0
+    edition = EditionWriter(out_dir, IMAGES_DIR / args.date, AUDIO_DIR / args.date, args.append)
+    try:
+        with edition:
+            written, held = generate_edition(args, args.categories, edition)
+            if written:
+                edition.commit()
+    except BaseException:
+        finish_run(run_id, False, held_back=getattr(edition, "held_back", held))
+        raise
+    finish_run(run_id, True, added=written, held_back=held)
+    print(f"\nDone: {written} new articles in {out_dir}")
+
+
+def generate_edition(args, chosen, edition):
+    out_dir = edition.articles
+    categories_file = out_dir / "group_categories.json"
+    categories = {}
     if args.append and categories_file.exists():
         categories = json.loads(categories_file.read_text(encoding="utf-8"))
-    else:
-        for folder in (out_dir, IMAGES_DIR / args.date, AUDIO_DIR / args.date):
-            for path in folder.glob("group_*"):
-                path.unlink()
-    out_dir.mkdir(parents=True, exist_ok=True)
     next_number = max((int(g.split("_")[1]) for g in categories), default=0) + 1
     args.per_category = args.per_category or (2 if args.update and categories else 3)
     covered = covered_texts(out_dir) if args.update else []
     added_at = datetime.now().astimezone().isoformat(timespec="seconds")  # one time per run: the site's "New" batch
-    written = 0
+    written, held = 0, 0
+    failed_categories = []
+    attempted_feeds = successful_feeds = 0
 
+    progress_started = time.monotonic()
+    total_categories = len(chosen)
+    report_job_progress("fetching", completed=0, total=total_categories, started=progress_started)
     print(f"Date: {args.date} | LLM: {LLM_PUBLISHER} / {LLM_MODEL}")
     scorer = ReliabilityScorer(ROOT_DIR)
     print(scorer.status())
@@ -382,15 +511,22 @@ def main():
     if seen_links:
         print(f"Skipping {len(seen_links)} links already used by earlier articles")
 
-    for category in chosen:
+    for category_index, category in enumerate(chosen):
+        report_job_progress("generating", completed=category_index, total=total_categories,
+                            category=category, started=progress_started)
+        before_category = written
         print(f"\n[{category}] fetching feeds...")
         items = fetch_items(category, args.per_feed, seen_links, fetcher)
+        attempted_feeds += getattr(items, "attempted_feeds", 0)
+        successful_feeds += getattr(items, "successful_feeds", 0)
         if covered:
             items, dropped = drop_covered_events(items, covered, args.similarity)
             if dropped:
                 print(f"[{category}] {dropped} items are about stories already covered today")
         if not items:
             print(f"[{category}] no new items, skipping")
+            if args.overwrite:
+                failed_categories.append(category)
             continue
 
         stories = group_items(items, args.similarity)
@@ -400,6 +536,7 @@ def main():
             drafts = write_articles(category, items, stories, args.per_category)
         except Exception as e:
             print(f"[{category}] LLM step failed: {e}")
+            failed_categories.append(category)
             continue
 
         used_stories = set()
@@ -421,8 +558,12 @@ def main():
             notes = []
             if not args.no_checks:
                 notes += enrich(article, cited)
-                if not article["body"]:
-                    print(f"  dropped (no sentence was supported by its sources): {article['headline']}")
+                reason = held_back(article)
+                if reason:
+                    held += 1
+                    edition.held_back = held
+                    record_hold(args.date, category, draft.get("headline", "Untitled story"), reason)
+                    print(f"  {reason}: {article['headline']}")
                     continue
             for section in article["body"]:
                 section.update(scorer.score_section(section["content"], section["sources"]))
@@ -433,10 +574,10 @@ def main():
             image_note = "no image"
             for link in ([] if args.no_images else sources):  # first source whose image downloads
                 item = by_link[link]
-                image_file = item["image"] and download_image(item["image"], IMAGES_DIR / args.date, group_id)
+                image_file = item["image"] and download_image(item["image"], edition.images, group_id)
                 if image_file:
                     article["image_file"] = image_file
-                    article["image_thumb"] = make_thumbnail(IMAGES_DIR / args.date / image_file) or None
+                    article["image_thumb"] = make_thumbnail(edition.images / image_file) or None
                     article["image_credit"] = item["publisher"]
                     article["image_source"] = item["link"]
                     image_note = f"image: {item['publisher']}"
@@ -450,20 +591,26 @@ def main():
 
             audio_note = "no audio"
             if not args.no_audio and article["summary_speech"]:
-                if make_audio(article["summary_speech"], AUDIO_DIR / args.date / f"{group_id}.mp3"):
+                if make_audio(article["summary_speech"], edition.audio / f"{group_id}.mp3"):
                     audio_note = "audio"
             details = ", ".join([story_id, f"{len(sources)} sources", image_note, audio_note, *notes])
             print(f"  {group_id} ({details}): {article['headline']}")
 
+        if args.overwrite and written == before_category:
+            failed_categories.append(category)
+
+    report_job_progress("publishing", completed=total_categories, total=total_categories,
+                        category="", started=progress_started)
+    if attempted_feeds and not successful_feeds:
+        sys.exit("News generation failed: every configured feed failed; the published edition was preserved.")
+    if failed_categories:
+        sys.exit(f"News generation failed for {', '.join(failed_categories)}; the published edition was preserved.")
     if not categories:
-        if not any(out_dir.iterdir()):
-            out_dir.rmdir()
         sys.exit("\nNo articles were written. Check your API key / LLM_PUBLISHER in .env and the errors above.")
 
     with open(categories_file, "w", encoding="utf-8") as f:
         json.dump(categories, f, indent=2)
-    print(f"\nDone: {written} new articles; {len(categories)} in {out_dir}")
-    print("Refresh http://localhost:3000 to see them.")
+    return written, held
 
 
 if __name__ == "__main__":

@@ -11,10 +11,16 @@ RUN pip install --no-cache-dir -r requirements/quick_news.txt
 
 COPY llm_client.py ./
 COPY apps/app/core/providers.py apps/app/core/providers.py
+COPY apps/app/core/generation.py apps/app/core/generation.py
+COPY apps/app/core/database.py apps/app/core/database.py
+COPY apps/app/core/object_storage.py apps/app/core/object_storage.py
+COPY apps/app/core/jobs.py apps/app/core/jobs.py
+COPY apps/app/core/monitoring.py apps/app/core/monitoring.py
+COPY apps/app/core/notifications.py apps/app/core/notifications.py
 COPY pipeline/ pipeline/
 
 # uid 1000 is usually the owner of the apps/static folder it writes into
-RUN useradd --create-home --uid 1000 appuser && mkdir -p apps/static && chown appuser apps/static
+RUN useradd --create-home --uid 1000 appuser && mkdir -p apps/static apps/cache && chown appuser apps/static apps/cache
 USER appuser
 
 ENV PYTHONUNBUFFERED=1 UPDATE_MINUTES=60

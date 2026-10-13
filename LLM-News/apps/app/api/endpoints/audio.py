@@ -27,7 +27,9 @@ async def article_audio(date: str, group_id: str, lang: str):
 
     if lang == "en":
         pipeline_audio = Path(f"static/audio/{date}/{group_id}.mp3")
-        if pipeline_audio.is_file():
+        source_file = Path(f"static/articles/{date}/{group_id}.json")
+        if (pipeline_audio.is_file() and source_file.is_file()
+                and pipeline_audio.stat().st_mtime_ns >= source_file.stat().st_mtime_ns):
             return FileResponse(pipeline_audio, media_type="audio/mpeg")
         text = article.get("summary_speech") or article.get("lead")
     else:
@@ -38,7 +40,7 @@ async def article_audio(date: str, group_id: str, lang: str):
 
     if not text:
         raise HTTPException(status_code=404, detail="This article has no summary to read aloud")
-    path = audio_cache("articles", date, f"{group_id}.{lang}.mp3")
+    path = audio_cache("articles", date, f"{group_id}.{lang}.mp3", text=text, lang=lang)
     try:
         await speak(text, path, lang)
     except Exception as e:

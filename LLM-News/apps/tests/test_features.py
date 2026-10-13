@@ -159,17 +159,99 @@ def test_rss_feed_is_valid_xml(static_root):
     assert items[0].findtext("link") == "http://news.example/article/2026-01-02/group_1"
 
 
+def test_rss_feed_can_be_filtered_by_category(static_root):
+    write_article(static_root, "2026-01-02", "group_1", "Model launch", "ai_models")
+    write_article(static_root, "2026-01-02", "group_2", "Tech story", "tech")
+    response = client.get("/feed.xml?category=ai_models")
+    root = ET.fromstring(response.content)
+    assert [item.findtext("title") for item in root.findall("./channel/item")] == ["Model launch"]
+    assert root.findtext("./channel/title") == "NewsSense · AI Models"
+
+
+def test_public_model_catalog_and_widget(static_root):
+    catalog = {
+        "updated_at": "2026-10-11", "currency": "USD", "price_unit": "per million tokens",
+        "models": [{"id": "safe-model.v2", "name": "Safe <Model>", "provider": "Example",
+                    "input_price": 1.5, "output_price": 4, "context_tokens": 128000}],
+    }
+    (static_root / "static" / "model_catalog.json").write_text(json.dumps(catalog), encoding="utf-8")
+    response = client.get("/models/catalog.json")
+    assert response.json() == catalog
+    assert response.headers["access-control-allow-origin"] == "*"
+    assert response.headers["cache-control"] == "public, max-age=3600"
+    html = client.get("/widgets/models?ids=safe-model.v2").text
+    assert "Safe &lt;Model&gt;" in html and "$1.5" in html and "128,000" in html
+    assert "Safe <Model>" not in html
+    share = client.get("/models/safe-model.v2/share", headers={"host": "news.example"})
+    assert share.status_code == 200
+    assert "Safe &lt;Model&gt; price, context and details" in share.text
+    assert 'property="og:image" content="http://news.example/social-preview.svg"' in share.text
+    assert 'rel="canonical" href="http://news.example/ai-models/safe-model.v2"' in share.text
+
+
 def test_update_status_for_the_countdown(static_root):
     assert client.get("/api/news/status").json()["next_update"] is None  # no updater has run
     status = static_root / "static" / "update_status.json"
     status.write_text(json.dumps({"date": "2026-10-04", "last_update": "2026-10-04T14:05:00+05:30",
                                   "next_update": "2026-10-04T15:05:00+05:30", "interval_minutes": 60, "added": 2}))
-    assert client.get("/api/news/status").json() == {
+    saved = client.get("/api/news/status").json()
+    assert {key: saved[key] for key in ("date", "last_update", "next_update", "interval_minutes", "added")} == {
         "date": "2026-10-04", "last_update": "2026-10-04T14:05:00+05:30",
         "next_update": "2026-10-04T15:05:00+05:30", "interval_minutes": 60, "added": 2}
+    assert saved["stale"] is True and saved["minutes_since_update"] > 0
     status.write_text(json.dumps({"last_update": "2026-10-04T14:05:00", "next_update": "soon", "interval_minutes": 60}))
     assert client.get("/api/news/status").json()["last_update"] is None  # broken file: no countdown
 
     path = write_article(static_root, "2026-10-04", "group_1", "Hourly story")
     path.write_text(json.dumps({**json.loads(path.read_text()), "added_at": "2026-10-04T14:05:00+05:30"}))
     assert client.get("/api/news?date=2026-10-04").json()[0]["added_at"] == "2026-10-04T14:05:00+05:30"
+
+
+def test_one_visitor_cannot_use_up_the_days_ai(monkeypatch):
+    monkeypatch.setattr(limits, "ai_visitor_daily_limiter",
+                        limits.RateLimiter(2, 24 * 3600, "You've reached today's limit of 2 AI questions."))
+    from app.api.endpoints import chat
+    monkeypatch.setattr(chat.llm_service, "pick_client", lambda model=None: None)
+    for _ in range(2):
+        assert client.post("/api/chat/stream", json={"message": "hi"}).status_code == 200
+    response = client.post("/api/chat/stream", json={"message": "hi"})
+    assert response.status_code == 429
+    assert response.json()["detail"] == "You've reached today's limit of 2 AI questions. Try again in 24 hours."
+    assert int(response.headers["Retry-After"]) > 23 * 3600
+    assert client.post("/api/translate/text", json={"text": "hola", "target_language": "en"}).status_code == 429
+    assert (limits.wait_text(45), limits.wait_text(600), limits.wait_text(32400)) == ("45 seconds", "10 minutes", "9 hours")
+
+
+def test_search_engines_get_robots_and_a_sitemap_of_every_article(static_root, monkeypatch):
+    write_article(static_root, "2026-10-03", "group_1", "Older")
+    write_article(static_root, "2026-10-04", "group_2", "Second")
+    write_article(static_root, "2026-10-04", "group_10", "Tenth")
+    robots = client.get("/robots.txt").text
+    assert "Disallow: /api/" in robots and "Sitemap: http://testserver/sitemap.xml" in robots
+
+    monkeypatch.setattr("app.api.endpoints.public.settings.PUBLIC_BASE_URL", "https://news.example.com")
+    response = client.get("/sitemap.xml")
+    assert response.headers["content-type"].startswith("application/xml")
+    ns = {"s": "http://www.sitemaps.org/schemas/sitemap/0.9"}
+    urls = [(u.findtext("s:loc", namespaces=ns), u.findtext("s:lastmod", namespaces=ns))
+            for u in ET.fromstring(response.content).findall("s:url", ns)]
+    assert urls[0] == ("https://news.example.com/", "2026-10-04")
+    assert urls[-3:] == [("https://news.example.com/article/2026-10-04/group_2", "2026-10-04"),
+                         ("https://news.example.com/article/2026-10-04/group_10", "2026-10-04"),
+                         ("https://news.example.com/article/2026-10-03/group_1", "2026-10-03")]
+
+
+def test_rss_puts_hourly_stories_first_with_their_real_time(static_root):
+    write_article(static_root, "2026-10-04", "group_1", "Morning story")
+    later = write_article(static_root, "2026-10-04", "group_2", "Afternoon story")
+    later.write_text(json.dumps({**json.loads(later.read_text()), "added_at": "2026-10-04T15:12:00+05:30"}))
+    items = ET.fromstring(client.get("/feed.xml").content).findall("channel/item")
+    assert [i.findtext("title") for i in items] == ["Afternoon story", "Morning story"]
+    assert items[0].findtext("pubDate") == "Sun, 04 Oct 2026 15:12:00 +0530"
+
+
+def test_contact_email_only_when_it_looks_like_one(monkeypatch):
+    monkeypatch.setenv("CONTACT_EMAIL", "corrections@example.com")
+    assert client.get("/api/config").json()["contact_email"] == "corrections@example.com"
+    monkeypatch.setenv("CONTACT_EMAIL", "not an <email>")
+    assert client.get("/api/config").json()["contact_email"] == ""

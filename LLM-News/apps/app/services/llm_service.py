@@ -2,13 +2,15 @@ import asyncio
 import json
 import logging
 import os
+from types import SimpleNamespace
 from typing import AsyncIterator, Dict, List, Optional, Tuple
 
 import aiohttp
 
-from ..core import providers
+from ..core import generation, providers
 from ..core.config import settings
 from ..core.limits import ai_budget
+from .completion_client import record_call_finish
 
 # Add dashscope import with error handling
 try:
@@ -35,13 +37,17 @@ class HTTPLLMClient:
     # so only a stalled request trips it) or 3 minutes in all
     timeout = aiohttp.ClientTimeout(total=180, sock_connect=15, sock_read=60)
 
-    def __init__(self, base_url: str, api_key: str):
+    def __init__(self, base_url: str, api_key: str, provider: str = "Unknown"):
         self.base_url = base_url
         self.api_key = api_key
+        self.provider = provider
 
     async def stream(self, messages: List[Dict], model: str, temperature: float = 0.7) -> AsyncIterator[str]:
         """Yield text chunks from an OpenAI-compatible streaming chat completion (server-sent events)."""
         ai_budget.consume()
+        call_id = generation.start_call(self.provider, model, scope="website")
+        usage = None
+        completed = False
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json"
@@ -67,15 +73,21 @@ class HTTPLLMClient:
                         if data == "[DONE]":
                             break
                         try:
-                            choices = json.loads(data).get("choices") or []
+                            chunk = json.loads(data)
+                            choices = chunk.get("choices") or []
                         except ValueError:
                             continue
+                        if isinstance(chunk.get("usage"), dict):
+                            usage = chunk["usage"]
                         # Thinking models send reasoning_content first; only the answer is shown
                         text = choices[0].get("delta", {}).get("content") if choices else None
                         if text:
                             yield text
+            completed = True
         except asyncio.TimeoutError:
             raise AIServiceSlow("The AI service is taking too long to answer (it may be busy). Please try again.")
+        finally:
+            record_call_finish(call_id, response=SimpleNamespace(usage=usage), failed=not completed)
 
 
 class LLMService:
@@ -84,7 +96,7 @@ class LLMService:
     def __init__(self):
         # (provider name, client, model), preferred provider first
         self.clients: List[Tuple[str, HTTPLLMClient, str]] = [
-            (provider.name, HTTPLLMClient(provider.base_url, api_key), model)
+            (provider.name, HTTPLLMClient(provider.base_url, api_key, provider.name), model)
             for _, provider, api_key, model in providers.configured()
         ]
         for name, _, model in self.clients:
@@ -114,18 +126,24 @@ class LLMService:
     async def ask_knowledge_graph(self, query: str) -> str:
         """Answer from the Alibaba Cloud Knowledge Graph application (DashScope)."""
         ai_budget.consume()
-        dashscope.base_http_api_url = 'https://dashscope-intl.aliyuncs.com/api/v1'
-        response = await asyncio.to_thread(
-            Application.call,
-            api_key=settings.ALIBABA_LLM_KEY_KG,
-            app_id=os.getenv('ALIBABA_KG_APP_ID', ''),
-            prompt=query,
-            parameters={"temperature": 0.8, "max_tokens": 1024},
-        )
-        text = response.get("output", {}).get("text") if isinstance(response, dict) else None
-        if not text:
-            logger.error(f"Unexpected Knowledge Graph response: {response}")
-            raise RuntimeError("The Knowledge Graph returned an unexpected response.")
+        call_id = generation.start_call("Alibaba Knowledge Graph", KNOWLEDGE_GRAPH, scope="website")
+        try:
+            dashscope.base_http_api_url = 'https://dashscope-intl.aliyuncs.com/api/v1'
+            response = await asyncio.to_thread(
+                Application.call,
+                api_key=settings.ALIBABA_LLM_KEY_KG,
+                app_id=os.getenv('ALIBABA_KG_APP_ID', ''),
+                prompt=query,
+                parameters={"temperature": 0.8, "max_tokens": 1024},
+            )
+            text = response.get("output", {}).get("text") if isinstance(response, dict) else None
+            if not text:
+                logger.error("The Knowledge Graph returned an unexpected response")
+                raise RuntimeError("The Knowledge Graph returned an unexpected response.")
+        except BaseException:
+            record_call_finish(call_id, failed=True)
+            raise
+        record_call_finish(call_id, response=SimpleNamespace(usage=response.get("usage")))
         return text
 
     def get_health_status(self) -> Dict[str, bool]:

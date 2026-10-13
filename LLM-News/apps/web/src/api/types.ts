@@ -2,6 +2,8 @@
 // so these are kept by hand in this one file.
 
 export interface NewsItem {
+  story_identity?: string
+  content_version?: string
   id: number
   group_id: string
   headline: string
@@ -22,6 +24,31 @@ export interface NewsItem {
   added_at?: string | null
 }
 
+export interface ModelSnapshot {
+  id: string
+  name: string
+  provider: string
+  status: string
+  input_price: number
+  output_price: number
+  context_tokens: number
+  max_output_tokens: number | null
+  multimodal: boolean
+  open_weights: boolean
+  best_for: string[]
+  notes: string
+  source_url: string
+  pricing_url: string
+}
+
+export interface ModelCatalog {
+  updated_at: string
+  currency: string
+  price_unit: string
+  methodology: string
+  models: ModelSnapshot[]
+}
+
 /** Second AI pass that checked every sentence against the source items (pipeline/news_checks.py) */
 export interface ClaimCheck {
   checked: boolean
@@ -29,6 +56,15 @@ export interface ClaimCheck {
   removed: { text: string; reason: string }[]
   model?: string
   basis?: string
+  evidence?: ClaimEvidence[]
+}
+
+export interface ClaimEvidence {
+  id: string
+  text: string
+  field: string
+  section_index?: number
+  sources: { url: string; publisher: string; quote: string }[]
 }
 
 /** How each outlet framed a story covered by several of them */
@@ -70,6 +106,8 @@ export interface ArticleSection {
 }
 
 export interface Article {
+  story_identity?: string
+  content_version?: string
   group_id: string
   category: string
   headline: string
@@ -205,6 +243,14 @@ export interface AccuracyResponse {
 
 export type RelatedItem = NewsItem & { shared_topics: string[] }
 
+export interface StoryUpdates {
+  date: string
+  group_id: string
+  content_version: string
+  story_identity: string
+  updates: RelatedItem[]
+}
+
 export type ReportKind = 'wrong_fact' | 'missing_context' | 'bad_source' | 'other'
 
 export interface ReportRequest {
@@ -214,6 +260,88 @@ export interface ReportRequest {
   message: string
 }
 
+export interface Correction {
+  id: number
+  created_at: string
+  text: string
+}
+
+export type ReportStatus = 'open' | 'resolved' | 'dismissed'
+
+export interface ReaderReport extends ReportRequest {
+  original_headline?: string
+  story_identity?: string
+  article_matches?: boolean
+  id: number
+  created_at: string
+  status: ReportStatus
+  resolution: string
+  resolved_at: string | null
+}
+
+export interface PipelineUsage {
+  date: string
+  month: string
+  pipeline_calls: number
+  pipeline_limit: number
+  remaining: number | null
+  monthly_calls: number
+  monthly_limit: number
+  monthly_remaining: number | null
+  daily_spent_usd: number
+  daily_spend_limit_usd: number
+  daily_spend_remaining_usd: number | null
+  monthly_spent_usd: number
+  monthly_spend_limit_usd: number
+  monthly_spend_remaining_usd: number | null
+  models: { provider: string; model: string; calls: number; failed: number; prompt_tokens: number; completion_tokens: number; spent_usd: number; unpriced_calls: number }[]
+}
+
+export interface NewsUpdateProgress {
+  phase: 'queued' | 'starting' | 'fetching' | 'generating' | 'publishing' | 'completed' | 'failed' | string
+  category?: string
+  completed_categories?: number | null
+  total_categories?: number
+  percent?: number
+  estimated_seconds_remaining?: number | null
+  updated_at?: string
+}
+
+export interface NewsUpdateJob {
+  id: number
+  kind: 'news_update'
+  status: 'queued' | 'running' | 'succeeded' | 'failed'
+  attempts: number
+  created_at: string
+  locked_at: string | null
+  finished_at: string | null
+  last_error: string
+  progress: NewsUpdateProgress
+}
+
+export interface Operations {
+  held_stories?: { date: string; category: string; headline: string; reason: string; created_at: string }[]
+  update: UpdateStatus & { ok: boolean | null }
+  feeds: { publisher: string; url: string; category: string; ok: boolean; items: number; full_text_items: number; error: string | null; last_checked: string }[]
+  runs: { started_at: string; finished_at: string | null; date: string; status: string; added: number; held_back: number; error: string | null }[]
+  usage: PipelineUsage
+  news_update: NewsUpdateJob | null
+  jobs: {
+    counts: Record<string, number>
+    failed: { id: number; kind: string; attempts: number; finished_at: string | null; last_error: string }[]
+  }
+  events: { created_at: string; severity: 'info' | 'warning' | 'error' | 'critical'; component: string; event: string; detail: string }[]
+  notifications: { total: number; active: number; errors: number }
+  analytics: {
+    days: number
+    since: string
+    privacy: string
+    events: { event: string; count: number }[]
+    breakdown: { event: string; detail: string; count: number }[]
+    requests: { route: string; method: string; status_group: string; count: number; average_ms: number; max_ms: number }[]
+  }
+}
+
 /** Last and next news update (pipeline/daily_update.py --interval); all null without a schedule */
 export interface UpdateStatus {
   date: string | null
@@ -221,4 +349,14 @@ export interface UpdateStatus {
   next_update: string | null
   interval_minutes: number | null
   added: number
+  ok?: boolean | null
+  stale?: boolean
+  minutes_since_update?: number | null
+}
+
+/** Site settings the pages need (GET /api/config) */
+export interface SiteConfig {
+  contact_email: string
+  contact_address: string
+  vapid_public_key: string
 }

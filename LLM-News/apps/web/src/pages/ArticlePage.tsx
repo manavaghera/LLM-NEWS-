@@ -8,6 +8,8 @@ import { ArticleSections, BottomLine, SourcesList, Timeline } from '@/components
 import { AtAGlance } from '@/components/article/AtAGlance'
 import { AudioPlayer } from '@/components/article/AudioPlayer'
 import { CoverageComparison } from '@/components/article/CoverageComparison'
+import { ClaimEvidence } from '@/components/article/ClaimEvidence'
+import { CorrectionHistory } from '@/components/article/CorrectionHistory'
 import { EarlierCoverage } from '@/components/article/EarlierCoverage'
 import { ReportProblem } from '@/components/article/ReportProblem'
 import { ShareButton } from '@/components/article/ShareButton'
@@ -15,6 +17,7 @@ import { TranslateControl } from '@/components/article/TranslateControl'
 import { TrustNote } from '@/components/article/TrustNote'
 import { useArticleChatScope } from '@/components/chat/ChatProvider'
 import { SaveButton } from '@/components/news/LibraryButtons'
+import { FollowStoryButton } from '@/components/news/FollowStoryButton'
 import { ArticleImage, Kicker } from '@/components/news/parts'
 import { EmptyState, ErrorState, Skeleton } from '@/components/ui/feedback'
 import { useEdition, editionSearch } from '@/hooks/useEdition'
@@ -56,6 +59,8 @@ export function ArticlePage() {
   return (
     <article>
       <title>{`${shown.headline} · NewsSense`}</title>
+      <meta name="description" content={(shown.subheadline || shown.lead || shown.summary_speech || shown.headline).slice(0, 200)} />
+      <link rel="canonical" href={`${window.location.origin}/article/${date}/${groupId}`} />
       <Link
         to={{ pathname: '/', search: editionSearch(date, edition.dates[0]) }}
         className="mb-6 inline-flex items-center gap-1.5 text-sm text-muted hover:text-ink"
@@ -89,9 +94,13 @@ export function ArticlePage() {
                 onShowOriginal={() => setTranslation(null)}
               />
               <SaveButton article={{ date, group_id: groupId, headline: shown.headline, category: shown.category, image_url: shown.image_url }} />
+              <FollowStoryButton story={{ date, group_id: groupId, headline: article.data?.headline ?? shown.headline, category: shown.category,
+                content_version: article.data?.content_version, story_identity: article.data?.story_identity }} />
               <ShareButton date={date} groupId={groupId} title={shown.headline} />
             </div>
           </header>
+
+          <CorrectionHistory date={date} groupId={groupId} />
 
           <figure>
             <ArticleImage src={shown.image_url ?? media.image(date, groupId)} alt="" category={shown.category} priority className="aspect-[16/9] w-full rounded-2xl" />
@@ -102,6 +111,7 @@ export function ArticlePage() {
 
           {shown.lead && <p className="headline text-2xl leading-relaxed">{shown.lead}</p>}
           <ArticleSections article={shown} />
+          <ClaimEvidence check={shown.claim_check} />
           <CoverageComparison coverage={shown.coverage} />
           <BottomLine text={shown.conclusion} />
           <Timeline timeline={shown.timeline} />

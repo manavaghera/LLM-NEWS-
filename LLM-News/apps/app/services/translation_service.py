@@ -1,11 +1,14 @@
 import json
 import logging
 import re
+from contextlib import nullcontext
+from hashlib import sha256
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from ..core.config import settings
 from .completion_client import CompletionClient
+from .generation_cache import generation_lock, write_json
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +47,18 @@ def restore_citations(content: str, links: List[str]) -> str:
         marker = MARKER.format(n)
         content = content.replace(marker, link, 1) if marker in content else content + link
     return content
+
+
+def translation_signature(article: Dict, source_lang: str) -> str:
+    """Bind cache reuse to the exact text/evidence supplied, even if disk changes before locking."""
+    payload = {key: article.get(key, "")
+               for key in ("headline", "subheadline", "lead", "conclusion", "summary_speech")}
+    payload["timeline"] = article.get("timeline") or {}
+    payload["sections"] = [{"section": s.get("section", ""), "content": str(s.get("content", "")),
+                            "sources": s.get("sources", [])}
+                           for s in article.get("body", []) if isinstance(s, dict)]
+    payload["source_lang"] = source_lang
+    return sha256(json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
 
 
 class TranslationService:
@@ -85,12 +100,21 @@ class TranslationService:
             return article
 
         cache = self._cache_path(date, group_id, target_lang)
+        with generation_lock(cache) if cache else nullcontext():
+            return self._translate_article(article, target_lang, source_lang, date, group_id, cache)
+
+    def _translate_article(self, article: Dict, target_lang: str, source_lang: str,
+                           date: Optional[str], group_id: Optional[str], cache: Optional[Path]) -> Dict:
         source_file = Path(f"static/articles/{date}/{group_id}.json")
         source_version = source_file.stat().st_mtime_ns if cache and source_file.exists() else None
+        source_signature = translation_signature(article, source_lang)
         if cache and cache.exists():
             try:
                 saved = json.loads(cache.read_text(encoding="utf-8"))
-                if saved.get("source_version") == source_version:
+                saved_article = saved.get("article", {})
+                if (saved.get("source_version") == source_version
+                        and saved.get("source_signature") == source_signature
+                        and saved_article.get("_translation", {}).get("source_lang") == source_lang):
                     return saved["article"]
             except (OSError, ValueError, KeyError):
                 pass
@@ -152,9 +176,8 @@ class TranslationService:
         }
 
         if cache:
-            cache.parent.mkdir(parents=True, exist_ok=True)
-            cache.write_text(json.dumps({"source_version": source_version, "article": translated}, ensure_ascii=False),
-                             encoding="utf-8")
+            write_json(cache, {"source_version": source_version, "source_signature": source_signature,
+                              "article": translated})
         return translated
 
     def cached_translation(self, date: str, group_id: str, lang: str) -> Optional[Dict]:
@@ -163,7 +186,15 @@ class TranslationService:
         if not cache or not cache.exists():
             return None
         try:
-            return json.loads(cache.read_text(encoding="utf-8"))["article"]
+            source_file = Path(f"static/articles/{date}/{group_id}.json")
+            saved = json.loads(cache.read_text(encoding="utf-8"))
+            if saved.get("source_version") != source_file.stat().st_mtime_ns:
+                return None
+            source = json.loads(source_file.read_text(encoding="utf-8"))
+            source_lang = saved["article"]["_translation"]["source_lang"]
+            if saved.get("source_signature") != translation_signature(source, source_lang):
+                return None
+            return saved["article"]
         except (OSError, ValueError, KeyError):
             return None
 

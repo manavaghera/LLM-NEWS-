@@ -3,7 +3,7 @@ from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from ...core.limits import BudgetExceeded, limit_ai_requests
+from ...core.limits import BudgetExceeded, limit_ai_requests, limit_uncached_ai_requests
 from ...services.translation_service import TranslationService, SUPPORTED_LANGUAGES
 from ...services.news_service import NewsService
 
@@ -64,7 +64,7 @@ def translate_article_endpoint(request: TranslateRequest):
     return {"status": "success", "translations": results, "languages_requested": request.target_languages}
 
 
-@router.post("/text", dependencies=[Depends(limit_ai_requests)])
+@router.post("/text", dependencies=[Depends(limit_uncached_ai_requests)])
 def translate_text_endpoint(request: TranslateTextRequest):
     """Translate arbitrary text to a target language."""
     if request.target_language not in SUPPORTED_LANGUAGES:
