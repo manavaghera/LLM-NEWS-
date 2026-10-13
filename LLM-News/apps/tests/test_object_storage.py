@@ -30,6 +30,8 @@ class FakeStorage:
         self.objects[Key] = {"Body": Body, **kwargs}
 
     def get_object(self, Bucket, Key):
+        if Key not in self.objects:
+            raise MissingObject()
         return {"Body": io.BytesIO(self.objects[Key]["Body"])}
 
     def download_file(self, bucket, key, filename):
@@ -59,6 +61,12 @@ def test_push_publishes_manifest_last_and_pull_verifies_files(tmp_path, monkeypa
     assert pull(restored, storage) == 2
     assert (restored / "articles" / "2026-10-12" / "group_1.json").read_bytes() == article.read_bytes()
     assert pull(restored, storage) == 0
+
+    obsolete = restored / "articles" / "2026-10-11" / "group_99.json"
+    obsolete.parent.mkdir(parents=True)
+    obsolete.write_text('{"headline":"Old snapshot"}', encoding="utf-8")
+    assert pull(restored, storage) == 1
+    assert not obsolete.exists()
 
 
 def test_signed_manifest_rejects_storage_tampering(tmp_path, monkeypatch):
@@ -99,3 +107,10 @@ def test_pull_does_not_publish_corrupt_download(tmp_path):
     with pytest.raises(RuntimeError, match="integrity check failed"):
         pull(destination, storage)
     assert not (destination / "articles" / "item.json").exists()
+
+
+def test_first_deployment_can_start_before_a_manifest_exists(tmp_path):
+    storage = FakeStorage()
+    with pytest.raises(MissingObject):
+        pull(tmp_path / "strict", storage)
+    assert pull(tmp_path / "optional", storage, allow_missing_manifest=True) == 0

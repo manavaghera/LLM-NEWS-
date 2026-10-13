@@ -90,6 +90,8 @@ LLM-News/apps/web/dist/
 
 # Python
 **/__pycache__/
+**/.pytest_cache/
+**/.pytest-*/
 *.py[cod]
 *$py.class
 *.so

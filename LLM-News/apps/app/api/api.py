@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from .endpoints import admin, analytics, audio, health, news, chat, config, notifications, operations, reports, trends, translate, digest
+from .endpoints import admin, analytics, audio, health, news, chat, config, notifications, operations, reports, storage, trends, translate, digest
 
 api_router = APIRouter()
 
@@ -16,3 +16,4 @@ api_router.include_router(operations.router, prefix="/operations", tags=["operat
 api_router.include_router(analytics.router, prefix="/analytics", tags=["analytics"])
 api_router.include_router(admin.router, prefix="/admin", tags=["admin"])
 api_router.include_router(notifications.router, prefix="/notifications", tags=["notifications"])
+api_router.include_router(storage.router, prefix="/storage", tags=["storage"])

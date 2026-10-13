@@ -1,0 +1,105 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="420" viewBox="0 0 1200 420" role="img" aria-labelledby="title description">
+  <title id="title">NewsSense system flow</title>
+  <desc id="description">News moves from trusted feeds through an hourly updater and verification gate into durable storage, the API, Cloudflare and readers.</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#07111f"/>
+      <stop offset="0.48" stop-color="#101d35"/>
+      <stop offset="1" stop-color="#0b1326"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop stop-color="#63e6be"/>
+      <stop offset="0.5" stop-color="#60a5fa"/>
+      <stop offset="1" stop-color="#c084fc"/>
+    </linearGradient>
+    <filter id="glow" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#536987"/>
+    </marker>
+    <style>
+      .node { fill: #101f35; stroke: #2c4261; stroke-width: 1.5; }
+      .eyebrow { fill: #8ba4c7; font: 600 13px ui-sans-serif,system-ui,sans-serif; letter-spacing: 1.2px; }
+      .label { fill: #f6f8fc; font: 700 20px ui-sans-serif,system-ui,sans-serif; }
+      .detail { fill: #9eb1cd; font: 400 13px ui-sans-serif,system-ui,sans-serif; }
+      .line { fill: none; stroke: #536987; stroke-width: 2; marker-end: url(#arrow); }
+      .packet { fill: #63e6be; filter: url(#glow); }
+    </style>
+  </defs>
+
+  <rect width="1200" height="420" rx="26" fill="url(#background)"/>
+  <path d="M0 90 C260 10 450 170 720 80 S1040 10 1200 90" fill="none" stroke="#1d3150" opacity=".65"/>
+  <path d="M0 350 C230 260 430 420 690 330 S1010 270 1200 340" fill="none" stroke="#1a2942" opacity=".75"/>
+
+  <text x="54" y="56" fill="#f8fafc" font-family="ui-sans-serif,system-ui,sans-serif" font-size="25" font-weight="750">From source to reader in one signed flow</text>
+  <text x="54" y="82" fill="#8fa7c7" font-family="ui-sans-serif,system-ui,sans-serif" font-size="14">Hourly, durable and designed to fail safely</text>
+
+  <path class="line" d="M210 211 H276"/>
+  <path class="line" d="M448 211 H514"/>
+  <path class="line" d="M686 211 H752"/>
+  <path class="line" d="M924 211 H990"/>
+
+  <g transform="translate(42 142)">
+    <rect class="node" width="168" height="138" rx="18"/>
+    <circle cx="30" cy="30" r="9" fill="#63e6be"><animate attributeName="opacity" values=".35;1;.35" dur="2.3s" repeatCount="indefinite"/></circle>
+    <text class="eyebrow" x="22" y="62">INPUT</text>
+    <text class="label" x="22" y="89">Trusted feeds</text>
+    <text class="detail" x="22" y="113">RSS + official sources</text>
+  </g>
+  <g transform="translate(280 142)">
+    <rect class="node" width="168" height="138" rx="18"/>
+    <path d="M22 29h24M34 17v24" stroke="#60a5fa" stroke-width="3" stroke-linecap="round"/>
+    <text class="eyebrow" x="22" y="62">EVERY HOUR</text>
+    <text class="label" x="22" y="89">Update gate</text>
+    <text class="detail" x="22" y="113">Dedupe + safe publish</text>
+  </g>
+  <g transform="translate(518 142)">
+    <rect class="node" width="168" height="138" rx="18"/>
+    <path d="M23 21h22v18c0 10-11 15-11 15S23 49 23 39z" fill="none" stroke="#c084fc" stroke-width="2.5"/>
+    <path d="m29 36 4 4 8-10" fill="none" stroke="#c084fc" stroke-width="2.5"/>
+    <text class="eyebrow" x="22" y="62">DURABLE</text>
+    <text class="label" x="22" y="89">Supabase</text>
+    <text class="detail" x="22" y="113">Postgres + signed files</text>
+  </g>
+  <g transform="translate(756 142)">
+    <rect class="node" width="168" height="138" rx="18"/>
+    <path d="M23 24h23v22H23zM29 30h11M29 36h11" fill="none" stroke="#fb923c" stroke-width="2.2"/>
+    <text class="eyebrow" x="22" y="62">SERVE</text>
+    <text class="label" x="22" y="89">FastAPI</text>
+    <text class="detail" x="22" y="113">Search, admin + APIs</text>
+  </g>
+  <g transform="translate(994 142)">
+    <rect class="node" width="164" height="138" rx="18"/>
+    <path d="M22 40c4-13 23-15 30-4 9-3 17 3 17 11H22c-5 0-5-7 0-7z" fill="none" stroke="#facc15" stroke-width="2.2"/>
+    <text class="eyebrow" x="22" y="62">DELIVER</text>
+    <text class="label" x="22" y="89">Cloudflare</text>
+    <text class="detail" x="22" y="113">React UI + API proxy</text>
+  </g>
+
+  <circle class="packet" r="4" cy="211">
+    <animate attributeName="cx" values="214;272" dur="1.25s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0;1;0" dur="1.25s" repeatCount="indefinite"/>
+  </circle>
+  <circle class="packet" r="4" cy="211">
+    <animate attributeName="cx" values="452;510" dur="1.25s" begin=".25s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0;1;0" dur="1.25s" begin=".25s" repeatCount="indefinite"/>
+  </circle>
+  <circle class="packet" r="4" cy="211">
+    <animate attributeName="cx" values="690;748" dur="1.25s" begin=".5s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0;1;0" dur="1.25s" begin=".5s" repeatCount="indefinite"/>
+  </circle>
+  <circle class="packet" r="4" cy="211">
+    <animate attributeName="cx" values="928;986" dur="1.25s" begin=".75s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0;1;0" dur="1.25s" begin=".75s" repeatCount="indefinite"/>
+  </circle>
+
+  <rect x="378" y="326" width="444" height="48" rx="24" fill="#0c1729" stroke="#263b5b"/>
+  <circle cx="407" cy="350" r="5" fill="#63e6be"><animate attributeName="r" values="4;7;4" dur="2s" repeatCount="indefinite"/></circle>
+  <text x="426" y="356" fill="#c9d7eb" font-family="ui-sans-serif,system-ui,sans-serif" font-size="15">Previous edition stays live if an update fails</text>
+  <rect x="42" y="399" width="1116" height="3" rx="1.5" fill="#1f334f"/>
+  <rect x="42" y="399" width="260" height="3" rx="1.5" fill="url(#accent)">
+    <animate attributeName="x" values="42;898;42" dur="5s" repeatCount="indefinite"/>
+  </rect>
+</svg>

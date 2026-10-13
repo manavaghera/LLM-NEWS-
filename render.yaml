@@ -1,0 +1,51 @@
+services:
+  - type: web
+    name: newssense-api
+    runtime: docker
+    plan: free
+    rootDir: LLM-News/apps
+    dockerfilePath: ./LLM-News/apps/Dockerfile
+    dockerContext: ./LLM-News/apps
+    healthCheckPath: /api/health/live
+    autoDeploy: true
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: DEBUG
+        value: "false"
+      - key: LOG_FORMAT
+        value: json
+      - key: CACHE_DIR
+        value: /tmp/newssense-cache
+      - key: DATABASE_URL
+        sync: false
+      - key: PUBLIC_BASE_URL
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: ALLOWED_HOSTS
+        sync: false
+      - key: ADMIN_TOKEN
+        generateValue: true
+      - key: ALLOW_LEGACY_ADMIN_TOKEN
+        value: "false"
+      - key: METRICS_TOKEN
+        generateValue: true
+      - key: OBJECT_STORAGE_BUCKET
+        sync: false
+      - key: OBJECT_STORAGE_PREFIX
+        value: production/news
+      - key: OBJECT_STORAGE_REGION
+        sync: false
+      - key: OBJECT_STORAGE_ENDPOINT
+        sync: false
+      - key: OBJECT_STORAGE_ACCESS_KEY_ID
+        sync: false
+      - key: OBJECT_STORAGE_SECRET_ACCESS_KEY
+        sync: false
+      - key: OBJECT_STORAGE_FORCE_PATH_STYLE
+        value: "true"
+      - key: OBJECT_STORAGE_MANIFEST_KEY
+        sync: false
+      - key: STORAGE_SYNC_TOKEN
+        sync: false
