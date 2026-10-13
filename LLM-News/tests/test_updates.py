@@ -120,6 +120,23 @@ def test_overlapping_hourly_run_does_not_change_status_or_start_generation(tmp_p
     assert not (tmp_path / "update_status.json").exists()
 
 
+def test_owner_update_waits_for_the_active_updater(tmp_path, monkeypatch):
+    monkeypatch.setattr(daily_update, "STATIC_DIR", tmp_path)
+    monkeypatch.setenv("NEWS_UPDATE_JOB_ID", "12")
+    calls = iter(((daily_update.UPDATE_ALREADY_RUNNING, 0, "2026-10-13"),
+                  (0, 0, "2026-10-13")))
+    delays = []
+    progress = []
+    monkeypatch.setattr(daily_update, "run_once", lambda *args, **kwargs: next(calls))
+    monkeypatch.setattr(daily_update.time, "sleep", lambda seconds: delays.append(seconds))
+    monkeypatch.setattr(daily_update, "report_manual_progress", lambda **values: progress.append(values))
+
+    assert daily_update.run_every(60, "", [], once=True) == 0
+    assert delays == [15]
+    assert progress[0]["phase"] == "waiting_for_updater"
+    assert progress[-1]["phase"] == "completed"
+
+
 def test_lease_cleanup_failure_does_not_hide_a_successful_update(monkeypatch):
     monkeypatch.setattr(daily_update, "acquire_update_lease", lambda owner, ttl: True)
     monkeypatch.setattr(daily_update, "_run_once_locked", lambda *args, **kwargs: (0, 2, "2026-10-11"))

@@ -125,8 +125,15 @@ def run_every(minutes: int, backend_url: str, news_args: list, once: bool) -> in
         started = datetime.now()
         code, added, date = run_once(backend_url, False, news_args, update=True)
         if code == UPDATE_ALREADY_RUNNING:
+            if once and os.getenv("NEWS_UPDATE_JOB_ID"):
+                report_manual_progress(phase="waiting_for_updater", percent=1,
+                                       estimated_seconds_remaining=None,
+                                       updated_at=datetime.now().astimezone().isoformat(timespec="seconds"))
+                print("  waiting for the active updater before retrying this owner request")
+                time.sleep(15)
+                continue
             if once:
-                return code if os.getenv("NEWS_UPDATE_JOB_ID") else 0
+                return 0
             time.sleep(max(0.0, (started + timedelta(minutes=minutes) - datetime.now()).total_seconds()))
             continue
         # A provider call can take longer than the requested interval. Record when publication
