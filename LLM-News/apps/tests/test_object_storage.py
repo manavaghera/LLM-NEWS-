@@ -42,7 +42,8 @@ def storage_config(monkeypatch):
     monkeypatch.setenv("OBJECT_STORAGE_PREFIX", "production/news")
 
 
-def test_push_publishes_manifest_last_and_pull_verifies_files(tmp_path):
+def test_push_publishes_manifest_last_and_pull_verifies_files(tmp_path, monkeypatch):
+    monkeypatch.setenv("OBJECT_STORAGE_MANIFEST_KEY", "a-separate-signing-key-with-32-chars")
     source = tmp_path / "source"
     (source / "articles" / "2026-10-12").mkdir(parents=True)
     article = source / "articles" / "2026-10-12" / "group_1.json"
@@ -58,6 +59,21 @@ def test_push_publishes_manifest_last_and_pull_verifies_files(tmp_path):
     assert pull(restored, storage) == 2
     assert (restored / "articles" / "2026-10-12" / "group_1.json").read_bytes() == article.read_bytes()
     assert pull(restored, storage) == 0
+
+
+def test_signed_manifest_rejects_storage_tampering(tmp_path, monkeypatch):
+    monkeypatch.setenv("OBJECT_STORAGE_MANIFEST_KEY", "a-separate-signing-key-with-32-chars")
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "item.json").write_text("{}", encoding="utf-8")
+    storage = FakeStorage()
+    push(source, storage)
+    key = "production/news/manifest.json"
+    manifest = json.loads(storage.objects[key]["Body"])
+    manifest["files"][0]["size"] = 999
+    storage.objects[key]["Body"] = json.dumps(manifest).encode()
+    with pytest.raises(RuntimeError, match="signature is invalid"):
+        pull(tmp_path / "restore", storage)
 
 
 def test_pull_rejects_manifest_path_traversal(tmp_path):

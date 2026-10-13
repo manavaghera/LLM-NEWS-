@@ -8,7 +8,8 @@ from ...core.limits import RateLimiter, client_ip
 from .reports import require_admin
 
 router = APIRouter()
-event_limiter = RateLimiter(limit=60, window_seconds=60)
+event_limiter = RateLimiter(
+    limit=60, window_seconds=60, scope="analytics-event", persistent=True)
 
 
 class AnalyticsEvent(BaseModel):

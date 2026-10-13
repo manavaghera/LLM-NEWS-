@@ -9,17 +9,24 @@ export function TrustNote({ article }: { article: Article }) {
   const publishers = [...new Set(article.body.flatMap((s) => s.Publishers ?? []))].map(publisherName)
   const model = writerModel(article.generated_by)
   const check = article.claim_check
+  const sourceBrief = article.verification_status === 'source_brief'
 
   return (
     <div className="space-y-2 rounded-xl bg-accent-soft/60 px-4 py-3 text-sm">
       <p className="flex items-start gap-2">
         <ShieldCheck className="mt-0.5 size-4 shrink-0 text-accent" aria-hidden />
         <span>
-          <strong className="font-semibold">AI-written from {plural(sources, 'source')}</strong>
+          <strong className="font-semibold">{sourceBrief ? `Source brief from ${plural(sources, 'source')}` : `AI-written from ${plural(sources, 'source')}`}</strong>
           {publishers.length > 0 && <> ({publishers.join(', ')})</>}
           {model && <> by {model}</>}. Numbers in brackets link to the original reporting.
         </span>
       </p>
+      {sourceBrief && (
+        <p className="flex items-start gap-2 text-amber-700 dark:text-amber-300">
+          <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+          <span><strong className="font-semibold">Verification pending.</strong> This rapid brief reproduces a primary source feed and will be replaced after the complete editorial check.</span>
+        </p>
+      )}
       {check?.checked && (
         <div className="flex items-start gap-2">
           {check.removed.length ? (

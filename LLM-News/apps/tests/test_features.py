@@ -57,6 +57,20 @@ def test_daily_budget_caps_calls():
     limits.DailyBudget(limit=0).consume(10_000)  # 0 disables the cap
 
 
+def test_persistent_limits_survive_new_instances(tmp_path, monkeypatch):
+    monkeypatch.setenv("CACHE_DIR", str(tmp_path / "persistent-limits"))
+    first = limits.RateLimiter(1, scope="test-restart", persistent=True)
+    first.check("1.2.3.4")
+    restarted = limits.RateLimiter(1, scope="test-restart", persistent=True)
+    with pytest.raises(limits.RateLimited):
+        restarted.check("1.2.3.4")
+
+    budget = limits.DailyBudget(1, scope="test-budget", persistent=True)
+    budget.consume()
+    with pytest.raises(limits.BudgetExceeded):
+        limits.DailyBudget(1, scope="test-budget", persistent=True).consume()
+
+
 def test_visitor_ip_counts_our_proxies_from_the_end(monkeypatch):
     from starlette.requests import Request
 

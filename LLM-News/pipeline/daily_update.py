@@ -20,6 +20,7 @@ import time
 import socket
 import urllib.request
 import uuid
+import hashlib
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Tuple
@@ -69,6 +70,11 @@ def warm(backend_url: str, path: str) -> None:
         print(f"  could not prepare {path}: {e}")
 
 
+def article_snapshot(folder: Path) -> dict[str, str]:
+    """Content hashes let a verified in-place upgrade count as a changed story."""
+    return {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in edition_files(folder)}
+
+
 def run_once(backend_url: str, email: bool, news_args: list, update: bool = False) -> Tuple[int, int, str]:
     """Write the news; with update, add to today's edition when it exists. Returns (exit code, new articles, date)."""
     date = datetime.now().strftime("%Y-%m-%d")
@@ -94,12 +100,13 @@ def run_once(backend_url: str, email: bool, news_args: list, update: bool = Fals
 def _run_once_locked(date: str, backend_url: str, email: bool, news_args: list,
                      update: bool = False) -> Tuple[int, int, str]:
     edition = STATIC_DIR / "articles" / date
-    before = len(edition_files(edition))
-    mode = ["--update"] if update and before else []
+    before_snapshot = article_snapshot(edition)
+    mode = ["--update"] if update and before_snapshot else []
     print(f"[{datetime.now():%Y-%m-%d %H:%M}] {'Looking for new stories' if mode else 'Writing the news'} for {date}")
     script = ROOT / "pipeline" / "quick_news.py"
     code = subprocess.run([sys.executable, str(script), "--date", date, *mode, *news_args], cwd=ROOT).returncode
-    added = len(edition_files(edition)) - before
+    after_snapshot = article_snapshot(edition)
+    added = sum(before_snapshot.get(name) != digest for name, digest in after_snapshot.items())
     if code != 0:
         print("The news script failed; nothing else was done.")
         return code, added, date
@@ -114,7 +121,7 @@ def _run_once_locked(date: str, backend_url: str, email: bool, news_args: list,
         enqueue("warm_digest", {"date": date})
         enqueue("warm_audio", {"date": date})
         enqueue("deliver_notifications", {"date": date, "event": "edition_updated", "added": added})
-    if email or (before == 0 and os.getenv("EMAIL_DIGEST_ENABLED", "").lower() == "true"):
+    if email or (not before_snapshot and os.getenv("EMAIL_DIGEST_ENABLED", "").lower() == "true"):
         enqueue("email_digest", {"date": date})
     return 0, added, date
 
@@ -125,8 +132,15 @@ def run_every(minutes: int, backend_url: str, news_args: list, once: bool) -> in
         started = datetime.now()
         code, added, date = run_once(backend_url, False, news_args, update=True)
         if code == UPDATE_ALREADY_RUNNING:
+            if once and os.getenv("NEWS_UPDATE_JOB_ID"):
+                report_manual_progress(phase="waiting_for_updater", percent=1,
+                                       estimated_seconds_remaining=None,
+                                       updated_at=datetime.now().astimezone().isoformat(timespec="seconds"))
+                print("  waiting for the active updater before retrying this owner request")
+                time.sleep(15)
+                continue
             if once:
-                return code if os.getenv("NEWS_UPDATE_JOB_ID") else 0
+                return 0
             time.sleep(max(0.0, (started + timedelta(minutes=minutes) - datetime.now()).total_seconds()))
             continue
         # A provider call can take longer than the requested interval. Record when publication

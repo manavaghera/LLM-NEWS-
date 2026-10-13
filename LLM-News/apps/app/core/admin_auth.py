@@ -17,9 +17,16 @@ def configured_secret() -> str:
     return os.getenv("ADMIN_TOKEN", "")
 
 
+def legacy_token_enabled() -> bool:
+    """The bootstrap token closes automatically after named accounts exist."""
+    return (not admin_accounts.has_users()
+            or os.getenv("ALLOW_LEGACY_ADMIN_TOKEN", "").strip().lower() == "true")
+
+
 def valid_password(candidate: str | None) -> bool:
     expected = configured_secret()
-    return bool(expected and candidate and hmac.compare_digest(candidate.encode(), expected.encode()))
+    return bool(legacy_token_enabled() and expected and candidate
+                and hmac.compare_digest(candidate.encode(), expected.encode()))
 
 
 def create_session() -> str:
@@ -31,7 +38,7 @@ def create_session() -> str:
 
 
 def valid_session(token: str | None) -> bool:
-    if not token or "." not in token or not configured_secret():
+    if not token or "." not in token or not configured_secret() or not legacy_token_enabled():
         return False
     expires, supplied = token.split(".", 1)
     try:

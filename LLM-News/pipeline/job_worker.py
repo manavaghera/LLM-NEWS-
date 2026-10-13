@@ -26,10 +26,22 @@ def run_news_update(job: dict) -> None:
         sys.executable, str(ROOT / "pipeline" / "daily_update.py"),
         "--interval", os.getenv("UPDATE_MINUTES", "60"), "--once",
     ]
-    if os.getenv("MANUAL_UPDATE_AUDIO", "false").lower() != "true":
+    fast = os.getenv("MANUAL_UPDATE_MODE", "fast").strip().lower() != "full"
+    if fast:
+        # The button is for a quick breaking-news refresh. The scheduled updater
+        # still performs the full multi-category, full-text, verified edition.
+        command.extend([
+            "--categories", os.getenv("MANUAL_UPDATE_CATEGORIES", "ai_models"),
+            "--per-category", os.getenv("MANUAL_UPDATE_PER_CATEGORY", "1"),
+            "--per-feed", os.getenv("MANUAL_UPDATE_PER_FEED", "3"),
+            "--no-full-text", "--no-images", "--no-audio", "--no-checks", "--source-briefs",
+        ])
+    elif os.getenv("MANUAL_UPDATE_AUDIO", "false").lower() != "true":
         command.append("--no-audio")
     environment = os.environ.copy()
     environment["NEWS_UPDATE_JOB_ID"] = str(job["id"])
+    if fast:
+        environment.setdefault("UPDATE_ESTIMATE_SECONDS_PER_CATEGORY", "150")
     jobs.update_progress(job["id"], {"phase": "starting", "percent": 1})
     process = subprocess.Popen(command, cwd=ROOT, env=environment)
     timeout = max(600, int(os.getenv("NEWS_UPDATE_TIMEOUT_SECONDS", "21600")))

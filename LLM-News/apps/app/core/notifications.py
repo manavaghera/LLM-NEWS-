@@ -66,6 +66,28 @@ def _matches(article: dict, filters: dict) -> bool:
     return any(keyword in text for keyword in filters.get("keywords", []))
 
 
+def _delivery_key(article: dict) -> str:
+    """A material article version; verified upgrades may notify again, identical jobs may not."""
+    identity = {
+        key: article.get(key) for key in
+        ("date", "group_id", "story_identity", "content_version", "headline", "summary", "verification_status")
+    }
+    return hashlib.sha256(json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def _reserve_delivery(subscription_id: int, story_key: str) -> bool:
+    with connect("notifications") as database:
+        database.write_lock(f"push-delivery-{subscription_id}")
+        existing = database.execute(
+            "SELECT 1 AS found FROM push_deliveries WHERE subscription_id=? AND story_key=?",
+            (subscription_id, story_key),
+        ).fetchone()
+        if existing:
+            return False
+        database.execute("INSERT INTO push_deliveries VALUES(?,?,?)", (subscription_id, story_key, _now()))
+        return True
+
+
 def deliver(articles: list[dict]) -> dict:
     """Send one matching story to each active browser subscription."""
     private_key = os.getenv("VAPID_PRIVATE_KEY", "").strip()
@@ -80,9 +102,11 @@ def deliver(articles: list[dict]) -> dict:
     sent = 0
     for subscription in subscriptions:
         filters = json.loads(subscription["filters"])
-        article = next((item for item in articles if _matches(item, filters)), None)
+        article = next((item for item in articles if _matches(item, filters)
+                        and _reserve_delivery(subscription["id"], _delivery_key(item))), None)
         if not article:
             continue
+        story_key = _delivery_key(article)
         date, group_id = str(article.get("date", "")), str(article.get("group_id", ""))
         data = json.dumps({
             "title": "NewsSense update",
@@ -100,6 +124,8 @@ def deliver(articles: list[dict]) -> dict:
             status = getattr(getattr(exc, "response", None), "status_code", None)
             failures = int(subscription["failures"]) + 1
             with connect("notifications") as database:
+                database.execute("DELETE FROM push_deliveries WHERE subscription_id=? AND story_key=?",
+                                 (subscription["id"], story_key))
                 database.execute(
                     "UPDATE push_subscriptions SET failures=?,active=?,last_error=?,updated_at=? WHERE id=?",
                     (failures, 0 if status in {404, 410} or failures >= 5 else 1,
@@ -111,6 +137,11 @@ def deliver(articles: list[dict]) -> dict:
                 database.execute(
                     "UPDATE push_subscriptions SET failures=0,last_success_at=?,last_error='',updated_at=? WHERE id=?",
                     (_now(), _now(), subscription["id"]),
+                )
+                database.execute(
+                    "DELETE FROM push_deliveries WHERE subscription_id=? AND story_key NOT IN "
+                    "(SELECT story_key FROM push_deliveries WHERE subscription_id=? ORDER BY delivered_at DESC LIMIT 500)",
+                    (subscription["id"], subscription["id"]),
                 )
     return {"sent": sent, "skipped": False}
 

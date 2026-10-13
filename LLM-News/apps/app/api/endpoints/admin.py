@@ -7,7 +7,8 @@ from ...core.config import settings
 from ...core.limits import RateLimiter, client_ip
 
 router = APIRouter()
-login_limiter = RateLimiter(limit=8, window_seconds=15 * 60)
+login_limiter = RateLimiter(
+    limit=8, window_seconds=15 * 60, scope="admin-login", persistent=True)
 
 
 class LoginRequest(BaseModel):

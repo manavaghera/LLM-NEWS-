@@ -215,6 +215,30 @@ def test_successful_overwrite_publishes_checked_replacement(writer, monkeypatch)
     assert generation.recent_runs()[0]["added"] == 1
 
 
+def test_verified_update_replaces_pending_brief_in_place(writer, monkeypatch):
+    pending = {
+        "headline": "Pending brief", "verification_status": "source_brief",
+        "body": [{"content": "Pending", "sources": ["https://example.com/mission"]}],
+        "source_items": [{"title": "Council extends mission", "summary": "The mandate runs six months."}],
+    }
+    (writer[0] / "group_1.json").write_text(json.dumps(pending), encoding="utf-8")
+    monkeypatch.setattr(q, "fetch_items", Mock(return_value=[fake_item()]))
+    monkeypatch.setattr(q, "write_articles", Mock(return_value=[fake_draft()]))
+
+    def check(article, cited):
+        article["claim_check"] = {"checked": True, "removed": [], "evidence": []}
+        return []
+
+    monkeypatch.setattr(q, "enrich", check)
+    monkeypatch.setattr(sys, "argv", ["quick_news.py", "--date", DATE, "--update", "--categories", "tech",
+                                     "--no-images", "--no-audio", "--no-full-text"])
+    q.main()
+    saved = json.loads((writer[0] / "group_1.json").read_text())
+    assert saved["headline"] == "Council extends mission"
+    assert saved["verification_status"] == "verified"
+    assert not (writer[0] / "group_2.json").exists()
+
+
 def test_rejected_replacement_keeps_original_and_records_held_back(writer, monkeypatch):
     original = contents(writer)
     monkeypatch.setattr(q, "fetch_items", Mock(return_value=[fake_item()]))

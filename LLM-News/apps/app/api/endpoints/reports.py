@@ -13,7 +13,8 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 news_service = NewsService()
 report_service = ReportService()
-report_limiter = RateLimiter(limit=5, window_seconds=60)  # per visitor; reports are free but shouldn't be spammed
+report_limiter = RateLimiter(
+    limit=5, window_seconds=60, scope="reader-report", persistent=True)
 
 
 class ReportRequest(BaseModel):

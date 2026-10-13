@@ -117,10 +117,10 @@ export function OperationsPanel({ data, token, onBudget, onRefresh }: { data: Op
     <div className="space-y-8">
       <section aria-labelledby="pipeline-health" className="rounded-2xl border border-rule bg-surface p-5">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-          <div><h2 id="pipeline-health" className="text-lg font-semibold">Pipeline health</h2><p className="text-sm text-muted">Run the same safe updater used by the hourly schedule.</p></div>
+          <div><h2 id="pipeline-health" className="text-lg font-semibold">Pipeline health</h2><p className="text-sm text-muted">Publish a quick AI Models update in about 2–3 minutes. The hourly schedule still runs the complete verified edition.</p></div>
           <Button variant="primary" onClick={() => { void startUpdate() }} disabled={pending || updateActive}>
             <RefreshCw className={updateActive ? 'animate-spin' : ''} />
-            {updateActive ? 'Updating news…' : 'Update news now'}
+            {updateActive ? 'Updating AI news…' : 'Quick AI news update'}
           </Button>
         </div>
         <dl className="grid gap-4 text-sm sm:grid-cols-3">

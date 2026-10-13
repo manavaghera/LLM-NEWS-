@@ -14,12 +14,16 @@ def parse_options(feeds):
     parser.add_argument("--no-audio", action="store_true", help="don't generate audio summaries")
     parser.add_argument("--no-full-text", action="store_true", help="use RSS summaries only")
     parser.add_argument("--no-checks", action="store_true", help="skip fact-check and coverage comparison")
+    parser.add_argument("--source-briefs", action="store_true",
+                        help="publish concise source-feed briefs without calling the writing model")
     parser.add_argument("--overwrite", action="store_true", help="replace an existing edition after generation succeeds")
     parser.add_argument("--append", action="store_true", help="add to an edition")
     parser.add_argument("--update", action="store_true", help="append only events not already covered today")
     parser.add_argument("--categories", default=",".join(feeds), help="comma-separated categories")
     args = parser.parse_args()
     args.append = args.append or args.update
+    if args.source_briefs:
+        args.no_checks = True
     if args.overwrite and args.append:
         parser.error("--overwrite cannot be combined with --append or --update")
     if (args.per_category is not None and args.per_category < 1) or args.per_feed < 1:

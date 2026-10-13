@@ -1,6 +1,8 @@
 """Unit tests for pipeline/quick_news.py (no network or LLM calls). Run from LLM-News: python -m pytest tests"""
 import sys
 import asyncio
+import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "pipeline"))
@@ -23,6 +25,36 @@ def test_manual_job_progress_uses_completed_category_speed(monkeypatch):
     assert progress["completed_categories"] == 2 and progress["total_categories"] == 6
     assert progress["estimated_seconds_remaining"] == 240
     assert 0 < progress["percent"] < 100
+
+
+def test_source_brief_uses_feed_text_without_ai():
+    source = item("OpenAI releases a faster model", "The official feed announced a faster model.",
+                  publisher="OpenAI", region="us", n=7)
+    drafts = q.source_briefs([source], {"S1": [1]}, 1, now=datetime(2026, 10, 1, tzinfo=timezone.utc))
+    article = q.build_article(drafts[0], [source], {1}, "ai_models", "2026-10-13")
+    assert article["headline"] == source["title"]
+    assert article["body"][0]["sources"] == [source["link"]]
+    assert "full verification is pending" in article["subheadline"]
+
+
+def test_source_brief_prefers_a_fresh_primary_source():
+    old = item("Old official post", publisher="OpenAI", n=1) | {"published": "2026-10-01"}
+    report = item("New report", publisher="TechCrunchAI", n=2) | {"published": "2026-10-13"}
+    fresh = item("New official release", publisher="GoogleAI", n=3) | {"published": "2026-10-13"}
+    drafts = q.source_briefs([old, report, fresh], {"S1": [1], "S2": [2], "S3": [3]}, 1,
+                              now=datetime(2026, 10, 13, 12, tzinfo=timezone.utc))
+    assert [draft["headline"] for draft in drafts] == ["New official release"]
+
+
+def test_pending_source_brief_links_can_be_rechecked(tmp_path, monkeypatch):
+    folder = tmp_path / "2026-10-13"
+    folder.mkdir()
+    (folder / "group_1.json").write_text(json.dumps({
+        "verification_status": "source_brief", "body": [{"sources": ["https://example.com/brief"]}],
+    }), encoding="utf-8")
+    monkeypatch.setattr(q, "ARTICLES_DIR", tmp_path)
+    assert "https://example.com/brief" in q.previously_covered_links("2026-10-13", True, True)
+    assert "https://example.com/brief" not in q.previously_covered_links("2026-10-13", True, False)
 
 
 def item(title, summary="", publisher="BBCNews", region="uk", image="", n=0):

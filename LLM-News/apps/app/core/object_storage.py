@@ -6,6 +6,7 @@ only manifest-listed files into its writable news directory before the backend b
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import mimetypes
 import os
@@ -59,6 +60,15 @@ def _digest(path: Path) -> str:
     return checksum.hexdigest()
 
 
+def _manifest_signature(manifest: dict) -> str:
+    key = os.getenv("OBJECT_STORAGE_MANIFEST_KEY", "").encode()
+    if not key:
+        return ""
+    unsigned = {name: value for name, value in manifest.items() if name != "signature"}
+    payload = json.dumps(unsigned, sort_keys=True, separators=(",", ":")).encode()
+    return hmac.new(key, payload, hashlib.sha256).hexdigest()
+
+
 def _published_files(root: Path):
     for path in sorted(root.rglob("*")):
         if (path.is_file() and not path.is_symlink() and not path.name.startswith(".")
@@ -106,6 +116,9 @@ def push(root: Path, client=None) -> int:
         "published_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "files": entries,
     }
+    signature = _manifest_signature(manifest)
+    if signature:
+        manifest["signature"] = signature
     storage.put_object(
         Bucket=bucket, Key=_key("manifest.json"),
         Body=json.dumps(manifest, separators=(",", ":")).encode(),
@@ -139,6 +152,11 @@ def pull(root: Path, client=None) -> int:
         raise RuntimeError("Object-storage manifest is invalid") from exc
     if manifest.get("version") != MANIFEST_VERSION or not isinstance(manifest.get("files"), list):
         raise RuntimeError("Object-storage manifest version is unsupported")
+    if os.getenv("OBJECT_STORAGE_MANIFEST_KEY", ""):
+        supplied = manifest.get("signature")
+        expected = _manifest_signature(manifest)
+        if not isinstance(supplied, str) or not hmac.compare_digest(supplied, expected):
+            raise RuntimeError("Object-storage manifest signature is invalid")
 
     restored = 0
     for entry in manifest["files"]:

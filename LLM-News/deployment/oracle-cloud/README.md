@@ -64,6 +64,7 @@ OBJECT_STORAGE_REGION=auto
 OBJECT_STORAGE_ENDPOINT=https://ACCOUNT_ID.r2.cloudflarestorage.com
 OBJECT_STORAGE_ACCESS_KEY_ID=replace-me
 OBJECT_STORAGE_SECRET_ACCESS_KEY=replace-me
+OBJECT_STORAGE_MANIFEST_KEY=replace-with-a-separate-random-32-character-key
 METRICS_TOKEN=replace-with-another-long-random-value
 ALERT_WEBHOOK_URL=https://hooks.example.com/replace-me
 SENTRY_DSN=https://replace-me@sentry.example/1

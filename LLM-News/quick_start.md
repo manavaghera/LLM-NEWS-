@@ -12,7 +12,9 @@ When the website, backend and `pipeline/job_worker.py` are running, an owner can
 dashboard → Pipeline health → Update news now**. The dashboard shows the current category, processed
 category count, progress animation and estimated time remaining. Docker's `updates` profile starts the
 worker automatically. Set `MANUAL_UPDATE_AUDIO=true` only when manual updates should also generate
-article audio; it is disabled by default so the refresh finishes sooner.
+article audio. The dashboard button defaults to a one-story AI Models refresh without full-text fetching,
+media generation, or the slower second AI verification pass. Set `MANUAL_UPDATE_MODE=full` when the
+button should run the same complete workflow as the hourly updater instead.
 
 All scripts should be run from the project root unless a section says otherwise.
 

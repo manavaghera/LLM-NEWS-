@@ -53,7 +53,7 @@ export function AtAGlance({ article }: { article: Article }) {
               <span className="text-muted">Not scored for this article</span>
             )}
           </Row>
-          <Row label="Written by">{model ? <code className="text-xs">{model}</code> : 'AI model'}</Row>
+          <Row label="Written by">{article.verification_status === 'source_brief' ? 'Primary source feed' : model ? <code className="text-xs">{model}</code> : 'AI model'}</Row>
         </dl>
       </div>
       <Button variant="primary" className="w-full" onClick={() => setOpen(true)}>

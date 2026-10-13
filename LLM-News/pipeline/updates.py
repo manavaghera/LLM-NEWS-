@@ -19,7 +19,7 @@ def edition_files(out_dir: Path) -> List[Path]:
     return sorted(p for p in out_dir.glob("group_*.json") if p.name != "group_categories.json")
 
 
-def covered_texts(out_dir: Path) -> List[str]:
+def covered_texts(out_dir: Path, include_source_briefs: bool = True) -> List[str]:
     """What today's stories were written from (source titles and summaries; headline and lead for articles
     without source_items), in the same form as feed items so the two can be compared"""
     texts = []
@@ -27,6 +27,8 @@ def covered_texts(out_dir: Path) -> List[str]:
         try:
             article = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
+            continue
+        if not include_source_briefs and article.get("verification_status") == "source_brief":
             continue
         sources = article.get("source_items") or []
         texts += [f"{s.get('title', '')} {s.get('summary', '')}" for s in sources]

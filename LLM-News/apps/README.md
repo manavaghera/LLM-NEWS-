@@ -96,7 +96,7 @@ HTTPS certificate from Let's Encrypt, renews it, and redirects http to https.
 2. In `../.env`: `DOMAIN=news.example.com`, an AI key, a random `POSTGRES_PASSWORD` and `ADMIN_TOKEN`
    of at least 24 characters. `PUBLIC_BASE_URL` is set to `https://$DOMAIN` for you.
 3. Copy the news (`static/`) to the server, or run the news script there.
-4. Start it, with hourly news updates (see below):
+4. Start it, with hourly rapid briefs and the daily full verifier (see below):
 
    ```bash
    docker compose --env-file ../.env -f docker-compose.yml -f docker-compose.prod.yml --profile updates up -d --build
@@ -105,11 +105,17 @@ HTTPS certificate from Let's Encrypt, renews it, and redirects http to https.
 Only Caddy is reachable from outside; the backend counts visitors (for rate limits) from the address
 Caddy saw (`PROXY_COUNT=2`). Keep `AI_DAILY_CALL_LIMIT` and `AI_VISITOR_DAILY_LIMIT` set so a busy day,
 or one visitor, can't run up the AI bill. `PIPELINE_DAILY_CALL_LIMIT` caps attempted news-generation calls
-across processes and restarts (default 200/day); change it in the owner dashboard. Calls have different
+across processes and restarts (default 200/day); change it in the owner dashboard. API limits and the
+global AI-call budget are also stored in PostgreSQL, so backend restarts and replicas share the same
+counters. Calls have different
 prices, so set a currency spending limit with the AI provider too. Also set
 `ALLOWED_ORIGINS=https://your.domain`, `ADMIN_TOKEN` and
 `CONTACT_EMAIL` (shown on the About and Privacy pages), and keep only the keys you pay for: every key in
 `.env` appears in the chat's model menu.
+The `updater` service checks official AI-model feeds every `UPDATE_MINUTES` and publishes at most
+`HOURLY_UPDATE_PER_CATEGORY` fresh source brief without an AI call. The `verifier` service runs at
+`FULL_UPDATE_AT`, replaces pending briefs in place after evidence checks, and fills the other desks.
+The shared database lease prevents the two services from publishing simultaneously.
 To try it on your own computer first, use `DOMAIN=localhost` (Caddy then uses its own local certificate,
 which browsers warn about).
 
