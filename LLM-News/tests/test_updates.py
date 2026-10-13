@@ -46,6 +46,14 @@ def test_covered_texts_reads_sources_and_falls_back_to_headline(tmp_path):
     assert covered_texts(tmp_path) == ["G7 to release oil 100 million barrels", "Chip launch A faster processor."]
 
 
+def test_verified_update_can_reconsider_pending_source_briefs(tmp_path):
+    write(tmp_path, "group_1.json", {"verification_status": "source_brief",
+          "source_items": [{"title": "Pending model launch", "summary": "Primary source feed"}]})
+    write(tmp_path, "group_2.json", {"verification_status": "verified",
+          "source_items": [{"title": "Verified launch", "summary": "Checked report"}]})
+    assert covered_texts(tmp_path, include_source_briefs=False) == ["Verified launch Checked report"]
+
+
 def test_new_links_about_a_covered_event_are_dropped():
     covered = ["G7 agrees to release 100 million barrels of oil reserves to ease diesel prices"]
     follow_up = item("G7 oil reserve release begins", "The G7 started releasing oil reserves and diesel", "https://b/1")
@@ -170,3 +178,21 @@ def test_first_cloud_edition_queues_enabled_email_digest(tmp_path, monkeypatch):
     monkeypatch.setattr(daily_update, "enqueue", lambda kind, payload: queued.append((kind, payload)))
     assert daily_update._run_once_locked("2026-10-12", "", False, []) == (0, 1, "2026-10-12")
     assert queued == [("email_digest", {"date": "2026-10-12"})]
+
+
+def test_in_place_verified_upgrade_counts_as_an_updated_story(tmp_path, monkeypatch):
+    date = "2026-10-12"
+    edition = tmp_path / "articles" / date
+    write(edition, "group_1.json", {"verification_status": "source_brief", "headline": "Pending"})
+    monkeypatch.setattr(daily_update, "STATIC_DIR", tmp_path)
+    monkeypatch.setattr(daily_update, "push_object_storage", lambda _: 0)
+    queued = []
+    monkeypatch.setattr(daily_update, "enqueue", lambda kind, payload: queued.append((kind, payload)))
+
+    def verify(*_args, **_kwargs):
+        write(edition, "group_1.json", {"verification_status": "verified", "headline": "Checked"})
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(daily_update.subprocess, "run", verify)
+    assert daily_update._run_once_locked(date, "http://backend", False, [], update=True) == (0, 1, date)
+    assert {kind for kind, _ in queued} == {"warm_digest", "warm_audio", "deliver_notifications"}

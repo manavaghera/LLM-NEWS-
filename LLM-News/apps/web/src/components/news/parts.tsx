@@ -1,4 +1,4 @@
-import { Newspaper, Scale, ShieldCheck } from 'lucide-react'
+import { Newspaper, Scale, ShieldCheck, TriangleAlert } from 'lucide-react'
 import { useState } from 'react'
 import type { NewsItem } from '@/api/types'
 import { categoryInfo, plural, publisherName } from '@/lib/format'
@@ -68,15 +68,21 @@ function ImageSource({
 }
 
 /** Small signals of how a story was checked: claim check passed, outlets compared */
-export function TrustChips({ item }: { item: Pick<NewsItem, 'claim_check' | 'outlets_compared'> }) {
+export function TrustChips({ item }: { item: Pick<NewsItem, 'claim_check' | 'outlets_compared' | 'verification_status'> }) {
   const checked = item.claim_check?.checked
   const outlets = item.outlets_compared ?? 0
-  if (!checked && outlets < 2) return null
+  const sourceBrief = item.verification_status === 'source_brief'
+  if (!checked && outlets < 2 && !sourceBrief) return null
   return (
     <p className="relative z-10 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted">
       {checked && (
         <span className="inline-flex items-center gap-1" title="Every sentence was checked against its sources">
           <ShieldCheck className="size-3.5 text-positive" aria-hidden /> Fact-checked
+        </span>
+      )}
+      {sourceBrief && (
+        <span className="inline-flex items-center gap-1 font-medium text-amber-700 dark:text-amber-300" title="Published directly from a primary source feed; full verification is pending">
+          <TriangleAlert className="size-3.5" aria-hidden /> Source brief · verification pending
         </span>
       )}
       {outlets >= 2 && (

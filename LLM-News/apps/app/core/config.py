@@ -54,13 +54,20 @@ class Settings:
             issues.append("SENTRY_DSN must use https://")
         if not os.getenv("VAPID_PUBLIC_KEY") or not os.getenv("VAPID_PRIVATE_KEY"):
             issues.append("VAPID Web Push keys must be configured")
+        if os.getenv("OBJECT_STORAGE_BUCKET") and len(os.getenv("OBJECT_STORAGE_MANIFEST_KEY", "")) < 32:
+            issues.append("OBJECT_STORAGE_MANIFEST_KEY must contain at least 32 characters")
         if not os.getenv("VAPID_SUBJECT", "").startswith(("mailto:", "https://")):
             issues.append("VAPID_SUBJECT must use mailto: or https://")
         if not os.getenv("SMTP_HOST") or not os.getenv("SMTP_FROM") or not os.getenv("DIGEST_EMAIL_TO"):
             issues.append("SMTP_HOST, SMTP_FROM and DIGEST_EMAIL_TO must be configured")
-        from .admin_accounts import has_users
-        if not has_users() and len(os.getenv("ADMIN_TOKEN", "")) < 24:
+        from .admin_accounts import has_users, owner_mfa_ready
+        named_admins = has_users()
+        if not named_admins and len(os.getenv("ADMIN_TOKEN", "")) < 24:
             issues.append("Create a named administrator or set a 24-character ADMIN_TOKEN")
+        if named_admins and not owner_mfa_ready():
+            issues.append("Every active owner account must enable MFA")
+        if named_admins and os.getenv("ALLOW_LEGACY_ADMIN_TOKEN", "").strip().lower() == "true":
+            issues.append("Disable ALLOW_LEGACY_ADMIN_TOKEN after creating named administrators")
         try:
             if float(os.getenv("AI_DAILY_SPEND_LIMIT_USD", "0")) <= 0:
                 issues.append("AI_DAILY_SPEND_LIMIT_USD must be greater than zero")

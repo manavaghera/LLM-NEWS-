@@ -105,7 +105,9 @@ HTTPS certificate from Let's Encrypt, renews it, and redirects http to https.
 Only Caddy is reachable from outside; the backend counts visitors (for rate limits) from the address
 Caddy saw (`PROXY_COUNT=2`). Keep `AI_DAILY_CALL_LIMIT` and `AI_VISITOR_DAILY_LIMIT` set so a busy day,
 or one visitor, can't run up the AI bill. `PIPELINE_DAILY_CALL_LIMIT` caps attempted news-generation calls
-across processes and restarts (default 200/day); change it in the owner dashboard. Calls have different
+across processes and restarts (default 200/day); change it in the owner dashboard. API limits and the
+global AI-call budget are also stored in PostgreSQL, so backend restarts and replicas share the same
+counters. Calls have different
 prices, so set a currency spending limit with the AI provider too. Also set
 `ALLOWED_ORIGINS=https://your.domain`, `ADMIN_TOKEN` and
 `CONTACT_EMAIL` (shown on the About and Privacy pages), and keep only the keys you pay for: every key in

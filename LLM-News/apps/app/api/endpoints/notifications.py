@@ -10,7 +10,8 @@ from ...core.limits import RateLimiter, client_ip
 
 
 router = APIRouter()
-subscription_limiter = RateLimiter(10, 60, "Too many notification changes.")
+subscription_limiter = RateLimiter(
+    10, 60, "Too many notification changes.", scope="notification-change", persistent=True)
 
 
 def limit_changes(request: Request) -> None:

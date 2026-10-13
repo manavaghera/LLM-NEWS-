@@ -38,3 +38,13 @@ def test_delivery_only_sends_matching_topics(tmp_path, monkeypatch):
     }])
     assert result == {"sent": 1, "skipped": False}
     assert len(sent) == 1
+    assert notifications.deliver([{
+        "date": "2026-10-12", "group_id": "group_1", "category": "tech", "headline": "New chip",
+    }]) == {"sent": 0, "skipped": False}
+    assert len(sent) == 1
+
+    assert notifications.deliver([{
+        "date": "2026-10-12", "group_id": "group_1", "category": "tech", "headline": "New chip",
+        "verification_status": "verified",
+    }]) == {"sent": 1, "skipped": False}
+    assert len(sent) == 2

@@ -28,6 +28,16 @@ def has_users() -> bool:
         return False
 
 
+def owner_mfa_ready() -> bool:
+    """Production is safe only when every active owner has a second factor."""
+    try:
+        with connect("admin") as database:
+            rows = list(database.execute("SELECT totp_secret FROM admin_users WHERE active=1 AND role='owner'"))
+        return bool(rows) and all(str(row["totp_secret"]).strip() for row in rows)
+    except Exception:
+        return False
+
+
 def hash_password(password: str) -> str:
     if len(password) < 12:
         raise ValueError("Password must be at least 12 characters")
@@ -103,7 +113,12 @@ def login(username: str, password: str, otp: str = "") -> tuple[str, dict] | Non
     with connect("admin") as database:
         row = database.execute("SELECT * FROM admin_users WHERE username=? AND active=1",
                                (username.strip().lower(),)).fetchone()
-        if not row or not verify_password(password, row["password_hash"]) or not verify_totp(row["totp_secret"], otp):
+        password_ok = bool(row) and verify_password(password, row["password_hash"])
+        otp_ok = bool(row) and verify_totp(row["totp_secret"], otp)
+        if not password_ok or not otp_ok:
+            database.execute("INSERT INTO admin_audit(created_at,user_id,action,detail) VALUES(?,?,?,?)",
+                             (now.isoformat(timespec="seconds"), row["id"] if row else None, "login_failed",
+                              "known_account" if row else "unknown_account"))
             return None
         token = secrets.token_urlsafe(32)
         token_hash = hashlib.sha256(token.encode()).hexdigest()

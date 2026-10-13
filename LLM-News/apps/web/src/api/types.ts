@@ -19,6 +19,7 @@ export interface NewsItem {
   publishers?: string[]
   source_count?: number
   claim_check?: ClaimCheck | null
+  verification_status?: 'source_brief' | 'verified' | 'unverified'
   outlets_compared?: number
   /** When the update that added it ran (one time per run); missing on older editions */
   added_at?: string | null
@@ -118,6 +119,7 @@ export interface Article {
   timeline?: Record<string, string>
   summary_speech?: string
   generated_by?: string
+  verification_status?: 'source_brief' | 'verified' | 'unverified'
   image_credit?: string
   image_source?: string
   image_url?: string
