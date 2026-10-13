@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "include": [
+    "/api/*",
+    "/static/*",
+    "/share/*",
+    "/models/*",
+    "/widgets/*",
+    "/feed.xml",
+    "/robots.txt",
+    "/sitemap.xml"
+  ],
+  "exclude": []
+}

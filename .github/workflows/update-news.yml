@@ -1,0 +1,77 @@
+name: Update news
+
+on:
+  schedule:
+    # GitHub schedules use UTC. Minute 17 avoids the busiest top-of-hour window.
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: newssense-news-update
+  cancel-in-progress: false
+
+jobs:
+  publish-source-briefs:
+    if: github.event_name == 'workflow_dispatch' || vars.NEWS_UPDATES_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      TZ: Asia/Kolkata
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      OBJECT_STORAGE_BUCKET: ${{ secrets.OBJECT_STORAGE_BUCKET }}
+      OBJECT_STORAGE_PREFIX: production/news
+      OBJECT_STORAGE_REGION: ${{ secrets.OBJECT_STORAGE_REGION }}
+      OBJECT_STORAGE_ENDPOINT: ${{ secrets.OBJECT_STORAGE_ENDPOINT }}
+      OBJECT_STORAGE_ACCESS_KEY_ID: ${{ secrets.OBJECT_STORAGE_ACCESS_KEY_ID }}
+      OBJECT_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.OBJECT_STORAGE_SECRET_ACCESS_KEY }}
+      OBJECT_STORAGE_MANIFEST_KEY: ${{ secrets.OBJECT_STORAGE_MANIFEST_KEY }}
+      OBJECT_STORAGE_FORCE_PATH_STYLE: "true"
+      BACKEND_ORIGIN: ${{ secrets.BACKEND_ORIGIN }}
+      STORAGE_SYNC_TOKEN: ${{ secrets.STORAGE_SYNC_TOKEN }}
+
+    steps:
+      - name: Check out the release
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: LLM-News/requirements/quick_news.txt
+
+      - name: Install updater dependencies
+        run: python -m pip install -r LLM-News/requirements/quick_news.txt
+
+      - name: Restore the current published edition
+        run: python LLM-News/apps/app/core/object_storage.py pull LLM-News/apps/static --if-present
+
+      - name: Fetch and publish this hour's source briefs
+        id: update
+        continue-on-error: true
+        run: >-
+          python LLM-News/pipeline/daily_update.py
+          --interval 60
+          --once
+          --backend-url ""
+          --source-briefs
+          --per-category 1
+          --per-feed 3
+          --no-full-text
+          --no-images
+          --no-audio
+
+      # daily_update publishes article files before it writes update_status.json.
+      # This second idempotent push includes that final status in the signed manifest.
+      - name: Publish the completed update status
+        run: python LLM-News/apps/app/core/object_storage.py push LLM-News/apps/static
+
+      - name: Refresh the running API
+        run: python LLM-News/deployment/free-tier/sync_backend.py
+
+      - name: Report an updater failure after preserving its status
+        if: steps.update.outcome == 'failure'
+        run: exit 1

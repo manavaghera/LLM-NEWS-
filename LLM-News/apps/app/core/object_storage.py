@@ -40,6 +40,9 @@ def _client():
         "service_name": "s3",
         "region_name": os.getenv("OBJECT_STORAGE_REGION") or "auto",
     }
+    if os.getenv("OBJECT_STORAGE_FORCE_PATH_STYLE", "").strip().lower() in {"1", "true", "yes", "on"}:
+        from botocore.config import Config
+        options["config"] = Config(s3={"addressing_style": "path"})
     endpoint = os.getenv("OBJECT_STORAGE_ENDPOINT", "").strip()
     if endpoint:
         options["endpoint_url"] = endpoint
@@ -137,7 +140,12 @@ def _safe_destination(root: Path, relative: str) -> Path:
     return destination
 
 
-def pull(root: Path, client=None) -> int:
+def _missing_object(exc: Exception) -> bool:
+    code = str(getattr(exc, "response", {}).get("Error", {}).get("Code", ""))
+    return code in {"404", "NoSuchKey", "NotFound"}
+
+
+def pull(root: Path, client=None, *, allow_missing_manifest: bool = False) -> int:
     """Restore changed manifest-listed files using verified temporary downloads."""
     if not configured():
         return 0
@@ -145,7 +153,12 @@ def pull(root: Path, client=None) -> int:
     root = root.resolve()
     storage = client or _client()
     bucket = os.environ["OBJECT_STORAGE_BUCKET"].strip()
-    response = storage.get_object(Bucket=bucket, Key=_key("manifest.json"))
+    try:
+        response = storage.get_object(Bucket=bucket, Key=_key("manifest.json"))
+    except Exception as exc:
+        if allow_missing_manifest and _missing_object(exc):
+            return 0
+        raise
     try:
         manifest = json.loads(response["Body"].read())
     except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
@@ -159,6 +172,7 @@ def pull(root: Path, client=None) -> int:
             raise RuntimeError("Object-storage manifest signature is invalid")
 
     restored = 0
+    published_paths: set[str] = set()
     for entry in manifest["files"]:
         if not isinstance(entry, dict) or not isinstance(entry.get("path"), str):
             raise RuntimeError("Object-storage manifest contains an invalid file")
@@ -166,6 +180,7 @@ def pull(root: Path, client=None) -> int:
         expected_size = entry.get("size")
         if not isinstance(expected_hash, str) or len(expected_hash) != 64 or type(expected_size) is not int:
             raise RuntimeError("Object-storage manifest contains invalid integrity data")
+        published_paths.add(entry["path"])
         destination = _safe_destination(root, entry["path"])
         if destination.is_file() and destination.stat().st_size == expected_size and _digest(destination) == expected_hash:
             continue
@@ -181,6 +196,20 @@ def pull(root: Path, client=None) -> int:
             restored += 1
         finally:
             temporary.unlink(missing_ok=True)
+
+    # The signed manifest is the complete published snapshot. Remove files from an older
+    # snapshot only after every new or changed file has passed its integrity checks, so a
+    # failed download cannot turn the last good local edition into a partial one.
+    for path, relative in list(_published_files(root)):
+        if relative not in published_paths:
+            path.unlink()
+            restored += 1
+    directories = (path for path in root.rglob("*") if path.is_dir())
+    for directory in sorted(directories, key=lambda path: len(path.parts), reverse=True):
+        try:
+            directory.rmdir()
+        except OSError:
+            pass
     return restored
 
 
@@ -190,8 +219,14 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("operation", choices=("push", "pull"))
     parser.add_argument("root", type=Path)
+    parser.add_argument("--if-present", action="store_true",
+                        help="with pull: treat a missing first-deployment manifest as an empty store")
     args = parser.parse_args()
-    count = push(args.root) if args.operation == "push" else pull(args.root)
+    if args.if_present and args.operation != "pull":
+        parser.error("--if-present can be used only with pull")
+    count = push(args.root) if args.operation == "push" else pull(
+        args.root, allow_missing_manifest=args.if_present,
+    )
     print(f"object storage {args.operation}: {count} files changed")
     return 0
 
